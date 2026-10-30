@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="家計簿">
+<meta name="theme-color" content="#f6f5f2">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>家計簿</title>
+<style>
+:root {
+  --bg: #f6f5f2; --card: #ffffff; --text: #1d1d1f; --sub: #6e6e73; --line: #e5e3de;
+  --accent: #2f6f5e; --income: #2f6f5e; --expense: #b4483c; --chip: #efede8; --warn: #b07a12;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111312; --card: #1c1e1d; --text: #f2f2f0; --sub: #9a9c99; --line: #2c2f2d;
+    --accent: #5fb89d; --income: #5fb89d; --expense: #e47a6c; --chip: #2a2d2b; --warn: #e0b04f;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue", sans-serif; }
+body { padding: env(safe-area-inset-top) 0 calc(96px + env(safe-area-inset-bottom)); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+header { position: sticky; top: 0; z-index: 5; background: var(--bg);
+  padding: 12px 16px 8px; border-bottom: 1px solid var(--line); }
+.month { display: flex; align-items: center; justify-content: space-between; }
+.month h1 { font-size: 20px; margin: 0; font-weight: 700; }
+.month button { background: none; border: 0; font-size: 26px; width: 44px; height: 44px; color: var(--accent); }
+.summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+.summary div { background: var(--card); border-radius: 12px; padding: 8px 10px; }
+.summary small { display: block; color: var(--sub); font-size: 11px; }
+.summary b { font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.syncline { font-size: 12px; color: var(--warn); margin: 6px 2px 0; }
+.syncline:empty { display: none; }
+.tabs { display: flex; gap: 4px; margin-top: 10px; }
+.tabs button { flex: 1; border: 0; border-radius: 10px; padding: 8px 0; background: var(--chip); font-size: 13px; }
+.tabs button.on { background: var(--accent); color: #fff; }
+
+main { padding: 12px 16px; }
+.day { margin-bottom: 14px; }
+.day h2 { font-size: 12px; color: var(--sub); margin: 0 0 6px 4px; font-weight: 600; }
+.list { background: var(--card); border-radius: 12px; overflow: hidden; }
+.item { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); width: 100%;
+  background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; }
+.item:first-child { border-top: 0; }
+.item .cat { font-size: 15px; }
+.item .memo { font-size: 12px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .body { flex: 1; min-width: 0; }
+.item .amt { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; text-align: right; }
+.inc { color: var(--income); } .exp { color: var(--expense); }
+.empty { text-align: center; color: var(--sub); padding: 48px 0; }
+
+.bar-row { padding: 10px 14px; border-top: 1px solid var(--line); }
+.bar-row:first-child { border-top: 0; }
+.bar-row .top { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; margin-bottom: 6px; }
+.bar-row .top span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bar-row .top small { color: var(--sub); }
+.bar { height: 8px; background: var(--chip); border-radius: 4px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.bar i.over { background: var(--expense); }
+.diff { font-size: 11px; color: var(--sub); margin-top: 4px; text-align: right; font-variant-numeric: tabular-nums; }
+.diff.over { color: var(--expense); }
+.section-title { font-size: 13px; color: var(--sub); margin: 16px 4px 6px; font-weight: 600; display: flex; justify-content: space-between; }
+.section-title button { border: 0; background: none; color: var(--accent); font-size: 13px; padding: 0; }
+
+.kv { display: flex; justify-content: space-between; padding: 10px 14px; border-top: 1px solid var(--line); font-size: 14px; }
+.kv:first-child { border-top: 0; }
+.kv span:last-child { font-variant-numeric: tabular-nums; font-weight: 600; }
+.kv.big { font-size: 16px; background: var(--chip); }
+.kv small { color: var(--sub); font-weight: 400; }
+
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal .wd { text-align: center; font-size: 11px; color: var(--sub); }
+.cal button { background: var(--card); border: 0; border-radius: 8px; min-height: 46px; padding: 4px 2px; text-align: center;
+  display: flex; flex-direction: column; justify-content: space-between; }
+.cal button.today { outline: 2px solid var(--accent); }
+.cal .dn { font-size: 11px; color: var(--sub); }
+.cal .dv { font-size: 10px; font-variant-numeric: tabular-nums; color: var(--expense); }
+.cal .ds { font-size: 16px; line-height: 1; }
+
+.weeks { display: flex; gap: 4px; overflow-x: auto; }
+.weeks button { flex: 1; min-width: 60px; border: 0; border-radius: 10px; padding: 6px 2px; background: var(--chip); font-size: 12px; line-height: 1.3; }
+.weeks button.on { background: var(--accent); color: #fff; }
+
+.tbl-wrap { background: var(--card); border-radius: 12px; overflow-x: auto; }
+table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 8px; white-space: nowrap; text-align: right; border-top: 1px solid var(--line); }
+th { color: var(--sub); font-weight: 600; border-top: 0; }
+th:first-child, td:first-child { position: sticky; left: 0; background: var(--card); text-align: left; max-width: 130px;
+  overflow: hidden; text-overflow: ellipsis; }
+tr.grp td { font-weight: 700; background: var(--chip); }
+tr.total td { font-weight: 700; }
+
+.settings button.row { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; padding: 12px 14px;
+  background: none; border: 0; border-top: 1px solid var(--line); font-size: 14px; }
+.settings button.row small { color: var(--sub); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.settings button.act { display: block; width: 100%; text-align: left; padding: 14px; background: none;
+  border: 0; border-top: 1px solid var(--line); font-size: 15px; color: var(--accent); }
+.settings > :first-child { border-top: 0 !important; }
+.settings .danger { color: var(--expense); }
+.settings .field { padding: 10px 14px; }
+.grp-label { font-size: 12px; color: var(--sub); padding: 8px 14px 4px; border-top: 1px solid var(--line); background: var(--chip); }
+.tag { font-size: 10px; border-radius: 6px; padding: 1px 5px; background: var(--chip); color: var(--sub); margin-left: 4px; }
+.note { font-size: 12px; color: var(--sub); margin: 8px 4px; line-height: 1.6; }
+.note.err { color: var(--expense); }
+
+.fab { position: fixed; right: 20px; bottom: calc(24px + env(safe-area-inset-bottom)); width: 60px; height: 60px;
+  border-radius: 30px; border: 0; background: var(--accent); color: #fff; font-size: 32px; line-height: 60px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.2); z-index: 10; }
+
+.sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 20; display: none; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--card);
+  border-radius: 18px 18px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  transform: translateY(105%); transition: transform .22s ease; max-height: 92vh; overflow-y: auto; }
+.open > .sheet-bg { display: block; }
+.open > .sheet { transform: none; }
+.sheet h3 { margin: 0 0 10px; font-size: 17px; }
+.seg { display: flex; background: var(--chip); border-radius: 10px; padding: 3px; }
+.seg + .seg { margin-top: 8px; }
+.seg button { flex: 1; border: 0; background: none; padding: 8px 0; border-radius: 8px; font-size: 15px; }
+.seg.small button { padding: 6px 0; font-size: 13px; }
+.seg button.on { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.12); font-weight: 600; }
+.amount { display: flex; align-items: baseline; gap: 6px; margin: 14px 0 6px; border-bottom: 2px solid var(--line); }
+.amount span { font-size: 24px; color: var(--sub); }
+.amount input { flex: 1; min-width: 0; border: 0; background: none; font-size: 34px; font-weight: 700; padding: 4px 0;
+  outline: none; font-variant-numeric: tabular-nums; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+.chips button { border: 1px solid var(--line); background: var(--chip); border-radius: 18px; padding: 7px 12px; font-size: 14px; }
+.chips button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hint { font-size: 12px; color: var(--sub); margin: 0 2px 8px; min-height: 1em; }
+.field { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.field > label:first-child { width: 64px; flex: none; color: var(--sub); font-size: 14px; }
+.field input, .field select { flex: 1; min-width: 0; border: 0; background: none; font-size: 16px; outline: none; }
+.field input[type=checkbox] { flex: none; width: 20px; height: 20px; }
+.field .seg { flex: 1; }
+.actions { display: flex; gap: 10px; margin-top: 14px; }
+.actions button { flex: 1; border: 0; border-radius: 12px; padding: 14px 0; font-size: 16px; font-weight: 600; }
+.save { background: var(--accent); color: #fff; }
+.del { background: var(--chip); color: var(--expense); }
+.cancel { background: var(--chip); }
+
+.imp-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-top: 1px solid var(--line); }
+.imp-row:first-child { border-top: 0; }
+.imp-row input { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+.imp-row .body { flex: 1; min-width: 0; }
+.imp-row .name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imp-row small { color: var(--sub); font-size: 11px; }
+.imp-row small.unk { color: var(--warn); }
+.imp-row select { width: 100%; margin-top: 4px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px;
+  background: var(--chip); font-size: 14px; }
+.imp-row b { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 14px; }
+.imp-row.dup { opacity: .5; }
+</style>
+</head>
+<body>
+<header>
+  <div class="month">
+    <button id="prev" aria-label="前へ">‹</button>
+    <h1 id="monthLabel"></h1>
+    <button id="next" aria-label="次へ">›</button>
+  </div>
+  <div class="summary">
+    <div><small>収入</small><b class="inc" id="sumInc"></b></div>
+    <div><small>支出・貯蓄</small><b class="exp" id="sumExp"></b></div>
+    <div><small>収支</small><b id="sumBal"></b></div>
+  </div>
+  <p class="syncline" id="syncLine"></p>
+  <div class="tabs">
+    <button data-tab="list" class="on">明細</button>
+    <button data-tab="month">収支</button>
+    <button data-tab="week">週予算</button>
+    <button data-tab="year">年間</button>
+    <button data-tab="settings">設定</button>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<button class="fab" id="add" aria-label="追加">＋</button>
+
+<div id="sheetWrap">
+  <div class="sheet-bg" id="sheetBg"></div>
+  <form class="sheet" id="form" autocomplete="off">
+    <div class="seg" id="kindSeg">
+      <button type="button" data-kind="expense">支出</button>
+      <button type="button" data-kind="income">収入</button>
+      <button type="button" data-kind="saving">貯金・投資</button>
+    </div>
+    <div class="seg small" id="subSeg">
+      <button type="button" data-kubun="支出（変動費）">変動費</button>
+      <button type="button" data-kubun="支出（固定費）">固定費</button>
+      <button type="button" data-kubun="支出（特別費）">特別費</button>
+    </div>
+    <div class="amount"><span>¥</span><input id="fAmount" inputmode="numeric" placeholder="0"></div>
+    <div class="chips" id="fCats"></div>
+    <p class="hint" id="fHint"></p>
+    <div class="field"><label for="fMethod">支払方法</label><select id="fMethod"></select></div>
+    <div class="field"><label for="fDate">日付</label><input type="date" id="fDate" required></div>
+    <div class="field"><label for="fMemo">詳細</label><input id="fMemo" placeholder="任意"></div>
+    <div class="field" id="satField"><label>満足度</label>
+      <div class="seg small" id="satSeg">
+        <button type="button" data-sat="◯">◯</button>
+        <button type="button" data-sat="△">△</button>
+        <button type="button" data-sat="✕">✕</button>
+        <button type="button" data-sat="ー">ー</button>
+      </div>
+    </div>
+    <div class="actions">
+      <button type="button" class="del" id="fDelete">削除</button>
+      <button type="button" class="cancel" id="fCancel">閉じる</button>
+      <button type="submit" class="save">保存</button>
+    </div>
+  </form>
+</div>
+
+<div id="panelWrap">
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet" id="panel"></div>
+</div>
+
+<input type="file" id="importFile" accept=".csv,text/csv" hidden>
+<input type="file" id="cardFile" accept=".csv,text/csv" multiple hidden>
+
+<script>
+const K_INC = '収入', K_SAVE = '先取り貯金・投資', K_FIX = '支出（固定費）', K_VAR = '支出（変動費）', K_SP = '支出（特別費）';
+const KUBUNS = [K_INC, K_SAVE, K_FIX, K_VAR, K_SP];
+const SHORT = { [K_INC]: '収入', [K_SAVE]: '先取り貯金・投資', [K_FIX]: '固定費', [K_VAR]: '変動費', [K_SP]: '特別費' };
+
+// 初期の費目（スプレッドシート連携時に「費目管理」の内容で置き換わる）
+const DEFAULT_ITEMS = (() => {
+  const names = {
+    [K_INC]: ['💰 パパ給与', '💰 ママ給与', '💰 パパ賞与', '💰 ママ賞与', '💰 児童手当', '💰 配当金', '💰 副業', '💰 その他'],
+    [K_SAVE]: ['💴 予備費', '💴 教育費', '💴 NISA', '💴 こどもNISA', '💴 児童手当', '💴 特別費', '💴 積立型保険'],
+    [K_FIX]: ['🏠 住居', '💡 電気', '🔥 ガス', '🚰 水道', '📱 通信費(ネット)', '📱 通信費(携帯）', '🎥 娯楽', '📒 自己投資・情報',
+      '🏫 学童', '🎨 習い事', '🧮 お小遣い（パパ）', '🧮 お小遣い（ママ）', '🎫 医療保険・収入保障保険', '💸 債務返済・奨学金'],
+    [K_VAR]: ['🍙 食費', '☕ 外食・カフェ', '🧴 日用品', '👦 こども', '👕 衣服・美容', '🕹️ 娯楽', '🍻 交際費', '🏥 医療費',
+      '🚃 交通費', '💼 立替経費', '❓ その他'],
+    [K_SP]: ['✈ 旅行', '🍴 お祝い', '💸 税金', '📝 火災保険', '💺 家具・家電', '🏥 特別医療費', '🎁 ギフト', '🥩 ふるさと納税',
+      '🏠 帰省', '📺 年会費', '❓ その他'],
+  };
+  const weekly = ['🍙 食費', '☕ 外食・カフェ', '🧴 日用品', '👦 こども', '🕹️ 娯楽', '🍻 交際費', '❓ その他'];
+  return KUBUNS.flatMap(k => names[k].map((h, i) => ({ kubun: k, himoku: h, methods: [], budget: 0, order: i + 1,
+    weekly: k === K_VAR && weekly.includes(h), note: '' })));
+})();
+const DEFAULT_METHODS = ['三井住友VISAカード(S)', '三井住友VISAカード(C)', '楽天カード(C)', '楽天カード(S)', 'エポスカード(C)',
+  'エポスカード(S)', '現金', '口座振替', '三菱UFJ銀行', 'ドコモSMTB銀行', 'ゆうちょ銀行', '三井住友銀行', '八十二長野銀行'];
+
+const KEY = 'kakeibo.entries.v3';
+const KEY_CFG = 'kakeibo.sync.v3';
+const KEY_MASTER = 'kakeibo.master.v3';
+const KEY_SPECIAL = 'kakeibo.special';
+const KEY_LAST = 'kakeibo.lastUsed';
+const KEY_CARDMAP = 'kakeibo.cardMap';
+
+const read = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const write = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+let entries = read(KEY, null) ?? migrate();
+let cfg = read(KEY_CFG, { url: '', token: '', lastSync: 0, error: '', ver: 0, syncedVer: 0 });
+let master = read(KEY_MASTER, { items: DEFAULT_ITEMS, methods: DEFAULT_METHODS, fromSheet: false });
+let specials = read(KEY_SPECIAL, {});   // { 'YYYY-MM': [{ id, name, budget, note }] }
+let lastUsed = read(KEY_LAST, { kubun: K_VAR, method: '' });
+let cardMap = read(KEY_CARDMAP, {});
+
+let cur = new Date(); cur.setDate(1);
+let tab = 'list';
+let weekSel = null;
+let editing = null;
+const f = { kubun: K_VAR, himoku: '', sat: 'ー' };
+
+function migrate() {
+  const v2 = read('kakeibo.entries.v2', null);
+  if (v2) return v2.map(e => ({ id: e.id, created: e.created, date: e.date, amount: e.amount, kubun: e.kubun,
+    himoku: e.himoku, method: e.method || '', memo: e.memo || '', satisfaction: e.satisfaction || 'ー', source: '手入力' }));
+  return read('kakeibo.entries.v1', []).map(e => ({ id: e.id, created: e.created, date: e.date, amount: e.amount,
+    kubun: e.type === 'income' ? K_INC : K_VAR, himoku: e.category, method: '', memo: e.memo || '', satisfaction: 'ー',
+    source: '手入力' }));
+}
+function persist() { write(KEY, entries); }
+function saveCfg() { write(KEY_CFG, cfg); }
+function markDirty() { cfg.ver = (cfg.ver || 0) + 1; saveCfg(); }
+const isDirty = () => cfg.ver !== cfg.syncedVer;
+
+// ---- helpers ----
+const yen = n => (n < 0 ? '−¥' : '¥') + Math.abs(Math.round(n)).toLocaleString('ja-JP');
+const num = n => Math.round(n).toLocaleString('ja-JP');
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const mkOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+const monthKey = () => mkOf(cur);
+const daysIn = (y, m) => new Date(y, m + 1, 0).getDate();
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = id => document.getElementById(id);
+const byDate = (a, b) => a.date.localeCompare(b.date) || (a.created || 0) - (b.created || 0);
+const toInt = s => { const n = parseInt(String(s).normalize('NFKC').replace(/[^\d-]/g, ''), 10); return isNaN(n) ? 0 : n; };
+const isIncome = e => e.kubun === K_INC;
+const newId = () => crypto.randomUUID();
+
+function itemOf(kubun, himoku) { return master.items.find(i => i.kubun === kubun && i.himoku === himoku); }
+function itemsOf(kubun) {
+  const list = master.items.filter(i => i.kubun === kubun).sort((a, b) => a.order - b.order).map(i => i.himoku);
+  const known = new Set(list);
+  for (const e of entries) if (e.kubun === kubun && !known.has(e.himoku)) { known.add(e.himoku); list.push(e.himoku); }
+  return list;
+}
+const budgetOf = (kubun, himoku) => itemOf(kubun, himoku)?.budget || 0;
+function allMethods() {
+  const s = new Set(master.methods);
+  master.items.forEach(i => i.methods.forEach(m => s.add(m)));
+  entries.forEach(e => e.method && s.add(e.method));
+  return [...s];
+}
+
+function agg(list) {
+  const sum = {}, by = {};
+  KUBUNS.forEach(k => { sum[k] = 0; by[k] = {}; });
+  for (const e of list) {
+    sum[e.kubun] = (sum[e.kubun] || 0) + e.amount;
+    const b = by[e.kubun] || (by[e.kubun] = {});
+    b[e.himoku] = (b[e.himoku] || 0) + e.amount;
+  }
+  return { sum, by };
+}
+const monthEntries = mk => entries.filter(e => e.date.startsWith(mk));
+
+// weeks start on Monday; a 6th partial week is merged into week 5 (same as the spreadsheet)
+function weeksOf(y, m) {
+  const offset = (new Date(y, m, 1).getDay() + 6) % 7, n = daysIn(y, m), weeks = [];
+  for (let d = 1; d <= n; d++) {
+    const w = Math.min(5, Math.floor((d - 1 + offset) / 7) + 1);
+    (weeks[w - 1] ||= { n: w, days: [] }).days.push(d);
+  }
+  return weeks;
+}
+
+// ---- render ----
+function render() {
+  const y = cur.getFullYear(), mo = cur.getMonth();
+  $('monthLabel').textContent = tab === 'year' ? `${fiscalYear()}年度` : `${y}年${mo + 1}月`;
+  const { sum } = agg(monthEntries(monthKey()));
+  const inc = sum[K_INC], out = Object.values(sum).reduce((s, v) => s + v, 0) - inc;
+  $('sumInc').textContent = yen(inc);
+  $('sumExp').textContent = yen(out);
+  $('sumBal').textContent = yen(inc - out);
+  $('sumBal').className = inc - out < 0 ? 'exp' : '';
+  $('syncLine').textContent = cfg.url && (isDirty() || cfg.error)
+    ? `スプレッドシート未反映の変更あり${cfg.error ? '（' + cfg.error + '）' : ''}` : '';
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  $('add').style.display = tab === 'settings' ? 'none' : '';
+  ({ list: renderList, month: renderMonth, week: renderWeek, year: renderYear, settings: renderSettings })[tab]();
+}
+
+function renderList() {
+  const list = monthEntries(monthKey());
+  if (!list.length) { $('main').innerHTML = '<div class="empty">この月の記録はありません<br>＋ボタンで追加</div>'; return; }
+  const byDay = {};
+  list.slice().sort((a, b) => byDate(b, a)).forEach(e => (byDay[e.date] ||= []).push(e));
+  const wd = '日月火水木金土';
+  $('main').innerHTML = Object.entries(byDay).map(([date, items]) => {
+    const d = new Date(date + 'T00:00');
+    return `<div class="day" id="d-${date}"><h2>${d.getMonth() + 1}月${d.getDate()}日（${wd[d.getDay()]}）</h2><div class="list">` +
+      items.map(e => `<button class="item" data-id="${e.id}">
+        <div class="body"><div class="cat">${esc(e.himoku)}<span class="tag">${SHORT[e.kubun] || esc(e.kubun)}</span></div>
+          <div class="memo">${esc([e.method, e.memo].filter(Boolean).join('・'))}</div></div>
+        <div class="amt ${isIncome(e) ? 'inc' : 'exp'}">${isIncome(e) ? '+' : '−'}${yen(e.amount)}</div>
+      </button>`).join('') + '</div></div>';
+  }).join('');
+}
+
+// one row of "actual vs budget"
+function barRow(name, actual, budget, income) {
+  const over = !income && budget > 0 && actual > budget;
+  const w = budget > 0 ? Math.min(actual / budget, 1) * 100 : 0;
+  const diff = budget > 0
+    ? (income ? `目安との差 ${yen(actual - budget)}` : over ? `${yen(actual - budget)} 超過` : `残り ${yen(budget - actual)}`) : '';
+  return `<div class="bar-row"><div class="top"><span>${esc(name)}</span>
+    <span>${yen(actual)}${budget > 0 ? ` <small>/ ${yen(budget)}</small>` : ''}</span></div>
+    ${budget > 0 ? `<div class="bar"><i class="${over ? 'over' : ''}" style="width:${w}%"></i></div>
+    <div class="diff ${over ? 'over' : ''}">${diff}</div>` : ''}</div>`;
+}
+
+function kubunSection(kubun, by, extraBudget) {
+  const names = itemsOf(kubun).filter(h => by[h] || budgetOf(kubun, h));
+  const total = names.reduce((s, h) => s + (by[h] || 0), 0);
+  const budget = extraBudget ?? names.reduce((s, h) => s + budgetOf(kubun, h), 0);
+  return `<div class="section-title"><span>${SHORT[kubun]}</span></div><div class="list">
+    ${barRow('合計', total, budget, kubun === K_INC)}
+    ${names.map(h => barRow(h, by[h] || 0, budgetOf(kubun, h), kubun === K_INC)).join('') || ''}</div>`;
+}
+
+function renderMonth() {
+  const mk = monthKey(), list = monthEntries(mk), { sum, by } = agg(list);
+  const a = sum[K_INC], b = sum[K_SAVE], c = sum[K_FIX], d = a - b - c, v = sum[K_VAR], s = sum[K_SP];
+  const rest = d - v - s, rate = a ? (v + s) / a * 100 : 0;
+  const plan = specials[mk] || [];
+  const planTotal = plan.reduce((t, p) => t + p.budget, 0);
+
+  // calendar of variable spending; days with no spending get a stamp
+  const y = cur.getFullYear(), mo = cur.getMonth(), n = daysIn(y, mo), today = ymd(new Date());
+  const offset = (new Date(y, mo, 1).getDay() + 6) % 7;
+  const daily = {};
+  list.forEach(e => { if (e.kubun === K_VAR) daily[e.date] = (daily[e.date] || 0) + e.amount; });
+  let cal = '月火水木金土日'.split('').map(w => `<div class="wd">${w}</div>`).join('') + '<div></div>'.repeat(offset);
+  for (let day = 1; day <= n; day++) {
+    const ds = `${mk}-${pad(day)}`, amt = daily[ds] || 0;
+    cal += `<button data-day="${ds}" class="${ds === today ? 'today' : ''}"><span class="dn">${day}</span>${
+      amt ? `<span class="dv">${num(amt)}</span>` : ds < today ? '<span class="ds">🐧</span>' : '<span></span>'}</button>`;
+  }
+  const noSpend = Array.from({ length: n }, (_, i) => `${mk}-${pad(i + 1)}`).filter(ds => ds < today && !daily[ds]).length;
+
+  $('main').innerHTML = `
+    <div class="section-title"><span>今月のやりくり</span></div>
+    <div class="list">
+      <div class="kv"><span>収入 (a)</span><span class="inc">${yen(a)}</span></div>
+      <div class="kv"><span>先取り貯金・投資 (b)</span><span>${yen(b)}</span></div>
+      <div class="kv"><span>固定費 (c)</span><span>${yen(c)}</span></div>
+      <div class="kv big"><span>やりくり予算 (d) <small>a−b−c</small></span><span>${yen(d)}</span></div>
+      <div class="kv"><span>変動費</span><span>${yen(v)}</span></div>
+      <div class="kv"><span>特別費</span><span>${yen(s)}</span></div>
+      <div class="kv big"><span>残り <small>d−変動費−特別費</small></span><span class="${rest < 0 ? 'exp' : 'inc'}">${yen(rest)}</span></div>
+      <div class="kv"><span>支出率 <small>(変動費+特別費)÷収入</small></span><span>${rate.toFixed(1)}%</span></div>
+    </div>
+    <div class="section-title"><span>変動費カレンダー</span><span>🐧 使わなかった日 ${noSpend}日</span></div>
+    <div class="cal">${cal}</div>
+    ${kubunSection(K_VAR, by[K_VAR])}
+    ${kubunSection(K_FIX, by[K_FIX])}
+    <div class="section-title"><span>特別費の予定</span><button id="addPlan">＋ 予定を追加</button></div>
+    <div class="list settings">${plan.map(p => `<button class="row" data-plan="${p.id}"><span>${esc(p.name)}${
+      p.note ? `<br><small>${esc(p.note)}</small>` : ''}</span><small>${yen(p.budget)}</small></button>`).join('') ||
+      '<div class="bar-row" style="color:var(--sub)">予定はありません</div>'}</div>
+    ${kubunSection(K_SP, by[K_SP], planTotal)}
+    ${kubunSection(K_SAVE, by[K_SAVE])}
+    ${kubunSection(K_INC, by[K_INC])}`;
+  $('main').querySelector('.cal').onclick = e => {
+    const btn = e.target.closest('[data-day]');
+    if (!btn) return;
+    tab = 'list'; render();
+    $('d-' + btn.dataset.day)?.scrollIntoView({ block: 'start' });
+  };
+  $('addPlan').onclick = () => editPlan(null);
+  $('main').querySelectorAll('[data-plan]').forEach(b => b.onclick = () => editPlan(plan.find(p => p.id === b.dataset.plan)));
+}
+
+function renderWeek() {
+  const y = cur.getFullYear(), mo = cur.getMonth(), mk = monthKey(), n = daysIn(y, mo);
+  const weeks = weeksOf(y, mo);
+  const now = new Date();
+  if (weekSel == null || weekSel > weeks.length) {
+    weekSel = now.getFullYear() === y && now.getMonth() === mo ? weeks.find(w => w.days.includes(now.getDate())).n : 1;
+  }
+  const wk = weeks[weekSel - 1];
+  const items = master.items.filter(i => i.kubun === K_VAR && i.weekly).sort((a, b) => a.order - b.order);
+  const varList = monthEntries(mk).filter(e => e.kubun === K_VAR);
+  const inWeek = varList.filter(e => wk.days.includes(+e.date.slice(8)));
+  const spent = (list, h) => list.filter(e => e.himoku === h).reduce((s, e) => s + e.amount, 0);
+  const rows = items.map(i => ({ name: i.himoku, budget: i.budget * wk.days.length / n, actual: spent(inWeek, i.himoku) }));
+  const tb = rows.reduce((s, r) => s + r.budget, 0), ta = rows.reduce((s, r) => s + r.actual, 0);
+  const mRows = items.map(i => ({ name: i.himoku, budget: i.budget, actual: spent(varList, i.himoku) }));
+  const label = w => `${mo + 1}/${w.days[0]}〜${mo + 1}/${w.days[w.days.length - 1]}`;
+
+  $('main').innerHTML = items.length ? `
+    <div class="weeks">${weeks.map(w => `<button data-w="${w.n}" class="${w.n === weekSel ? 'on' : ''}">${w.n}週目<br>${label(w)}</button>`).join('')}</div>
+    <div class="section-title"><span>${weekSel}週目（${label(wk)}・${wk.days.length}日間）</span></div>
+    <div class="list">${barRow('合計', ta, tb)}${rows.map(r => barRow(r.name, r.actual, r.budget)).join('')}</div>
+    <p class="note">週の予算 ＝ 月の予算 × その週の日数 ÷ ${n}日</p>
+    <div class="section-title"><span>今月の合計（週管理の費目）</span></div>
+    <div class="list">${barRow('合計', mRows.reduce((s, r) => s + r.actual, 0), mRows.reduce((s, r) => s + r.budget, 0))}
+      ${mRows.map(r => barRow(r.name, r.actual, r.budget)).join('')}</div>`
+    : '<div class="empty">週ごとに管理する費目がありません<br>設定 → 費目・予算 で「週予算」をオンにしてください</div>';
+  $('main').querySelector('.weeks')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-w]');
+    if (b) { weekSel = +b.dataset.w; render(); }
+  });
+}
+
+const fiscalYear = () => cur.getMonth() >= 3 ? cur.getFullYear() : cur.getFullYear() - 1;
+
+function renderYear() {
+  const fy = fiscalYear();
+  const months = Array.from({ length: 12 }, (_, i) => new Date(fy, 3 + i, 1));
+  const now = new Date();
+  const started = months.map(d => d <= now);
+  const nStarted = Math.max(started.filter(Boolean).length, 1);
+  const data = months.map(d => agg(monthEntries(mkOf(d))));
+  const avg = vals => vals.reduce((s, v, i) => s + (started[i] ? v : 0), 0) / nStarted;
+  const cells = vals => vals.map(v => `<td>${v ? num(v) : ''}</td>`).join('') + `<td>${num(avg(vals))}</td>`;
+  const head = `<tr><th>項目</th>${months.map(d => `<th>${d.getMonth() + 1}月</th>`).join('')}<th>月平均</th></tr>`;
+
+  const totals = KUBUNS.map(k => data.map(m => m.sum[k] || 0));
+  const outTotal = data.map((m, i) => KUBUNS.slice(1).reduce((s, k, j) => s + totals[j + 1][i], 0));
+  const balance = data.map((m, i) => totals[0][i] - outTotal[i]);
+  let body = `<tr class="total"><td>収支</td>${cells(balance)}</tr>`;
+  for (const [ki, k] of KUBUNS.entries()) {
+    body += `<tr class="grp"><td>${SHORT[k]}</td>${cells(totals[ki])}</tr>`;
+    for (const h of itemsOf(k)) {
+      const vals = data.map(m => m.by[k]?.[h] || 0);
+      if (vals.some(Boolean)) body += `<tr><td>${esc(h)}</td>${cells(vals)}</tr>`;
+    }
+  }
+  const maxOut = Math.max(...outTotal, ...totals[0], 1);
+  $('main').innerHTML = `
+    <div class="section-title"><span>月ごとの収入と支出・貯蓄</span></div>
+    <div class="list">${months.map((d, i) => `<div class="bar-row"><div class="top"><span>${d.getMonth() + 1}月</span>
+      <span class="${balance[i] < 0 ? 'exp' : ''}">${yen(balance[i])}</span></div>
+      <div class="bar" style="margin-bottom:3px"><i style="width:${totals[0][i] / maxOut * 100}%;background:var(--income)"></i></div>
+      <div class="bar"><i style="width:${outTotal[i] / maxOut * 100}%;background:var(--expense)"></i></div></div>`).join('')}</div>
+    <p class="note">上の棒が収入、下の棒が支出・貯蓄。右の数字は収支です。</p>
+    <div class="section-title"><span>費目別（${fy}年4月〜${fy + 1}年3月）</span></div>
+    <div class="tbl-wrap"><table>${head}${body}</table></div>
+    <p class="note">月平均は、始まっている月（${nStarted}か月）で割っています。記録のない費目は省略しています。</p>`;
+}
+
+function renderSettings() {
+  const last = cfg.lastSync ? new Date(cfg.lastSync).toLocaleString('ja-JP') : 'まだありません';
+  const groups = KUBUNS.map(k => {
+    const items = master.items.filter(i => i.kubun === k).sort((a, b) => a.order - b.order);
+    return `<div class="grp-label">${SHORT[k]}</div>` + items.map(i => `<button class="row" data-item="${esc(k + '|' + i.himoku)}">
+      <span>${esc(i.himoku)}${i.weekly ? '<span class="tag">週</span>' : ''}</span>
+      <small>${i.budget ? yen(i.budget) : ''}${i.methods[0] ? '・' + esc(i.methods[0]) : ''}</small></button>`).join('');
+  }).join('');
+  $('main').innerHTML = `
+    <div class="section-title"><span>カード明細</span></div>
+    <div class="list settings"><button class="act" id="cardBtn">カード明細CSVを取り込む</button></div>
+    <p class="note">楽天カード（e-NAVI）と三井住友カード（Vpass）のCSVに対応。同じ店の過去の記録から費目を自動で選び、登録済みの明細は除外します。</p>
+
+    <div class="section-title"><span>費目・予算</span><button id="addItem">＋ 費目を追加</button></div>
+    <div class="list settings">${groups}</div>
+
+    <div class="section-title"><span>スプレッドシート連携</span></div>
+    <div class="list settings">
+      <div class="field"><label for="cUrl">URL</label><input id="cUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.url)}"></div>
+      <div class="field"><label for="cToken">合言葉</label><input id="cToken" type="password" value="${esc(cfg.token)}"></div>
+      <button class="act" id="cSave">保存して今すぐ同期</button>
+      ${cfg.url ? '<button class="act" id="cMaster">シートから費目・予算を読み込み直す</button>' : ''}
+    </div>
+    <p class="note">最終同期：${last}${isDirty() ? '　未反映の変更あり' : ''}</p>
+    ${cfg.error ? `<p class="note err">前回の同期エラー：${esc(cfg.error)}</p>` : ''}
+    <p class="note">アプリが本体です。01_Raw_Data の B〜I 列はアプリの内容で上書きされます（数式の列には触れません）。シート側で追加された行（カードCSV取込など）はアプリに取り込まれます。修正・削除はアプリで行ってください。</p>
+
+    <div class="section-title"><span>CSV（01_Raw_Data の B〜I 列と同じ並び）</span></div>
+    <div class="list settings">
+      <button class="act" id="exportBtn">CSVで書き出す</button>
+      <button class="act" id="importBtn">CSVから読み込む</button>
+    </div>
+    <div class="section-title"><span>データ</span></div>
+    <div class="list settings"><button class="act danger" id="wipeBtn">この端末の記録をすべて削除</button></div>
+    <p class="note">記録件数：${entries.length}件</p>`;
+
+  $('cardBtn').onclick = () => $('cardFile').click();
+  $('addItem').onclick = () => editItem(null);
+  $('main').querySelectorAll('[data-item]').forEach(b => b.onclick = () => {
+    const [k, ...h] = b.dataset.item.split('|');
+    editItem(itemOf(k, h.join('|')));
+  });
+  $('cSave').onclick = connect;
+  if ($('cMaster')) $('cMaster').onclick = async () => {
+    try { await pullMaster(); alert('費目・予算を読み込みました。'); } catch (err) { alert('読み込めませんでした：' + errMsg(err)); }
+    render();
+  };
+  $('exportBtn').onclick = exportCsv;
+  $('importBtn').onclick = () => $('importFile').click();
+  $('wipeBtn').onclick = () => {
+    if (!confirm('この端末の記録をすべて削除します。元に戻せません。よろしいですか？')) return;
+    if (cfg.url && !confirm('次の同期で、スプレッドシートの 01_Raw_Data も空になります。本当によろしいですか？')) return;
+    entries = []; persist(); markDirty(); render();
+  };
+}
+
+// ---- generic panel (bottom sheet) ----
+function openPanel(html) {
+  $('panel').innerHTML = html;
+  $('panelWrap').classList.add('open');
+  $('panel').scrollTop = 0;
+  $('panel').querySelectorAll('[data-close]').forEach(b => b.onclick = closePanel);
+}
+function closePanel() { $('panelWrap').classList.remove('open'); document.activeElement?.blur(); }
+$('panelWrap').querySelector('.sheet-bg').onclick = closePanel;
+
+function methodOptions(selected, blank = '（なし）') {
+  const list = allMethods();
+  if (selected && !list.includes(selected)) list.unshift(selected);
+  return `<option value="">${blank}</option>` + list.map(m => `<option${m === selected ? ' selected' : ''}>${esc(m)}</option>`).join('');
+}
+const amountInput = el => el.oninput = () => {
+  const v = el.value.replace(/[^\d]/g, '');
+  el.value = v ? Number(v).toLocaleString('ja-JP') : '';
+};
+
+function editItem(it) {
+  const isNew = !it;
+  const cur0 = it || { kubun: K_VAR, himoku: '', methods: [], budget: 0, order: 99, weekly: false, note: '' };
+  openPanel(`<h3>${isNew ? '費目を追加' : '費目を編集'}</h3>
+    <div class="field"><label>区分</label><select id="iKubun">${KUBUNS.map(k => `<option value="${k}"${k === cur0.kubun ? ' selected' : ''}>${k}</option>`).join('')}</select></div>
+    <div class="field"><label>費目名</label><input id="iName" value="${esc(cur0.himoku)}" placeholder="例：🍙 食費"></div>
+    <div class="field"><label>月の予算</label><input id="iBudget" inputmode="numeric" placeholder="0" value="${cur0.budget ? num(cur0.budget) : ''}"></div>
+    <div class="field"><label>支払方法</label><select id="iMethod">${methodOptions(cur0.methods[0], '（指定なし）')}</select></div>
+    <div class="field"><label>表示順</label><input id="iOrder" inputmode="numeric" value="${cur0.order}"></div>
+    <div class="field" id="iWeeklyRow"><label>週予算</label><input type="checkbox" id="iWeekly"${cur0.weekly ? ' checked' : ''}><span>週ごとに管理する</span></div>
+    <div class="field"><label>内容</label><input id="iNote" value="${esc(cur0.note)}" placeholder="任意（入力時のヒントに表示）"></div>
+    <div class="actions">${isNew ? '' : '<button type="button" class="del" id="iDel">削除</button>'}
+      <button type="button" class="cancel" data-close>閉じる</button><button type="button" class="save" id="iSave">保存</button></div>`);
+  amountInput($('iBudget'));
+  const toggleWeekly = () => $('iWeeklyRow').style.display = $('iKubun').value === K_VAR ? '' : 'none';
+  $('iKubun').onchange = toggleWeekly; toggleWeekly();
+  $('iSave').onclick = () => {
+    const kubun = $('iKubun').value, himoku = $('iName').value.trim();
+    if (!himoku) { $('iName').focus(); return; }
+    const dup = itemOf(kubun, himoku);
+    if (dup && dup !== it) { alert('同じ区分に同じ名前の費目があります。'); return; }
+    const m = $('iMethod').value;
+    const next = { kubun, himoku, budget: toInt($('iBudget').value), order: toInt($('iOrder').value) || 99,
+      weekly: kubun === K_VAR && $('iWeekly').checked, note: $('iNote').value.trim(),
+      methods: m ? [m, ...cur0.methods.filter(x => x !== m)] : [] };
+    if (isNew) master.items.push(next);
+    else {
+      // renaming a 費目 also renames past records
+      if (it.kubun !== kubun || it.himoku !== himoku) {
+        let changed = 0;
+        entries.forEach(e => { if (e.kubun === it.kubun && e.himoku === it.himoku) { e.kubun = kubun; e.himoku = himoku; changed++; } });
+        if (changed) { persist(); markDirty(); }
+      }
+      Object.assign(it, next);
+    }
+    write(KEY_MASTER, master);
+    closePanel(); render(); sync();
+  };
+  if ($('iDel')) $('iDel').onclick = () => {
+    if (!confirm(`「${it.himoku}」を費目の一覧から削除しますか？\n（過去の記録はそのまま残ります）`)) return;
+    master.items = master.items.filter(x => x !== it);
+    write(KEY_MASTER, master); closePanel(); render();
+  };
+}
+
+function editPlan(p) {
+  const mk = monthKey();
+  openPanel(`<h3>${cur.getMonth() + 1}月の特別費の予定</h3>
+    <div class="field"><label>項目</label><input id="pName" value="${esc(p?.name)}" placeholder="例：固定資産税"></div>
+    <div class="field"><label>予算</label><input id="pBudget" inputmode="numeric" placeholder="0" value="${p?.budget ? num(p.budget) : ''}"></div>
+    <div class="field"><label>詳細</label><input id="pNote" value="${esc(p?.note)}" placeholder="任意"></div>
+    <div class="actions">${p ? '<button type="button" class="del" id="pDel">削除</button>' : ''}
+      <button type="button" class="cancel" data-close>閉じる</button><button type="button" class="save" id="pSave">保存</button></div>`);
+  amountInput($('pBudget'));
+  $('pSave').onclick = () => {
+    const name = $('pName').value.trim();
+    if (!name) { $('pName').focus(); return; }
+    const data = { name, budget: toInt($('pBudget').value), note: $('pNote').value.trim() };
+    if (p) Object.assign(p, data); else (specials[mk] ||= []).push({ id: newId(), ...data });
+    write(KEY_SPECIAL, specials); closePanel(); render();
+  };
+  if ($('pDel')) $('pDel').onclick = () => {
+    specials[mk] = specials[mk].filter(x => x !== p);
+    write(KEY_SPECIAL, specials); closePanel(); render();
+  };
+}
+
+// ---- sync with Google Sheets (Apps Script web app) ----
+async function post(body) {
+  const res = await fetch(cfg.url, { method: 'POST', body: JSON.stringify({ token: cfg.token, ...body }) });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error === 'token' ? '合言葉が違います' : data.error);
+  return data;
+}
+const errMsg = err => err instanceof TypeError ? '接続できませんでした' : err.message;
+
+async function pullMaster() {
+  const data = await post({ action: 'master' });
+  if (!data.items || !data.items.length) throw new Error('費目が見つかりませんでした');
+  master = { items: data.items, methods: [...new Set([...DEFAULT_METHODS, ...data.items.flatMap(i => i.methods)])], fromSheet: true };
+  write(KEY_MASTER, master);
+}
+
+async function connect() {
+  cfg.url = $('cUrl').value.trim(); cfg.token = $('cToken').value; cfg.error = '';
+  saveCfg();
+  if (!cfg.url) { render(); return; }
+  if (!cfg.lastSync && !confirm('初回の同期では、01_Raw_Data の記録をすべてアプリに取り込み、以後はアプリの内容をシートに書き写します。\n初回にシートのバックアップ（01_Raw_Data_backup_日付）が自動で作られます。\n\n続けますか？')) return;
+  if (!master.fromSheet) { try { await pullMaster(); } catch (err) { alert('費目・予算は読み込めませんでした：' + errMsg(err)); } }
+  await sync({ manual: true });
+}
+
+let syncing = false;
+async function sync({ manual = false, force = false } = {}) {
+  if (!cfg.url || syncing) return;
+  const stale = Date.now() - (cfg.lastSync || 0) > 30 * 60 * 1000;
+  if (!manual && !force && !isDirty() && !stale) return;
+  if (!navigator.onLine) { if (manual) alert('オフラインのため同期できません。電波のあるところで再度お試しください。'); return; }
+  syncing = true;
+  const sentVer = cfg.ver;
+  let added = [];
+  try {
+    const rows = entries.slice().sort(byDate)
+      .map(e => [e.date, e.amount, e.kubun, e.himoku, e.method, e.memo, e.satisfaction, e.source]);
+    const data = await post({ action: 'sync', rows });
+    added = data.added || [];
+    added.forEach(r => entries.push({ id: newId(), created: Date.now(), date: r[0], amount: Number(r[1]), kubun: r[2],
+      himoku: r[3], method: r[4], memo: r[5], satisfaction: r[6], source: r[7] }));
+    cfg.syncedVer = sentVer;
+    if (added.length) cfg.ver++;   // write them back so they become part of the app's copy
+    cfg.lastSync = Date.now(); cfg.error = '';
+    persist();
+    if (manual) alert(`同期しました（シートへ ${rows.length}件・シートから取り込み ${added.length}件）`);
+  } catch (err) {
+    cfg.error = errMsg(err);
+    if (manual) alert('同期に失敗しました：' + cfg.error);
+  } finally {
+    syncing = false;
+    saveCfg();
+    render();
+  }
+  if (added.length) sync({ force: true });
+}
+
+// ---- CSV backup (same column order as 01_Raw_Data B–I) ----
+const CSV_HEAD = ['利用日', '金額', '区分', '費目', '入出金方法', '詳細', '満足度', 'データ元'];
+const csvCell = s => /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+
+async function exportCsv() {
+  const rows = [CSV_HEAD].concat(entries.slice().sort(byDate)
+    .map(e => [e.date, String(e.amount), e.kubun, e.himoku, e.method, e.memo, e.satisfaction, e.source]));
+  const text = '﻿' + rows.map(r => r.map(c => csvCell(c || '')).join(',')).join('\r\n');
+  const name = `kakeibo-${ymd(new Date())}.csv`;
+  const file = new File([text], name, { type: 'text/csv' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function parseCsv(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') q = false;
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (c !== '\r') cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+async function readText(file) {
+  const buf = await file.arrayBuffer();
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^﻿/, ''); }
+  catch { return new TextDecoder('shift_jis').decode(buf); }   // 三井住友カードの明細は Shift_JIS
+}
+function toYmd(s) {
+  const m = /^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/.exec(String(s || '').trim());
+  return m ? `${m[1]}-${pad(m[2])}-${pad(m[3])}` : '';
+}
+
+$('importFile').onchange = async ev => {
+  const file = ev.target.files[0]; ev.target.value = '';
+  if (!file) return;
+  const rows = parseCsv(await readText(file));
+  const skip = rows[0]?.[0] === '取引ID' ? 1 : 0;   // older exports included 取引ID
+  const added = [];
+  for (const r of rows.slice(1)) {
+    const [date, amount, kubun, himoku, method, memo, sat, source] = r.slice(skip);
+    const d = toYmd(date), n = toInt(amount);
+    if (!d || !n) continue;
+    added.push({ id: newId(), created: Date.now(), date: d, amount: n, kubun: kubun || K_VAR, himoku: himoku || '❓ その他',
+      method: method || '', memo: memo || '', satisfaction: sat || 'ー', source: source || '手入力' });
+  }
+  if (!added.length) { alert('読み込める行がありませんでした。'); return; }
+  const replace = entries.length && confirm(`${added.length}件を読み込みます。\n\nOK：今のデータを置き換える\nキャンセル：今のデータに追加する`);
+  entries = replace ? added : entries.concat(added);
+  persist(); markDirty(); render(); sync();
+  alert(`${added.length}件を読み込みました。`);
+};
+
+// ---- card statement import ----
+// Compare store names loosely: full-width → half-width, all dash variants → "-"
+const norm = s => String(s || '').normalize('NFKC').replace(/[‐-―−－]/g, '-').replace(/\s+/g, ' ').trim();
+const dupKey = (date, amount, method, memo) => `${date}|${amount}|${method}|${norm(memo)}`;
+
+const CARD_RULES = [
+  [/まいばすけっと|ヨーカドー.*食|イオン|ライフ|西友|サミット|成城石井|業務スーパー|オーケー|マルエツ|コープ|生協/, K_VAR, '🍙 食費'],
+  [/セブン|ファミリーマート|ローソン/, K_VAR, '🍙 食費'],
+  [/スターバックス|ドトール|タリーズ|マクドナルド|すき家|吉野家|松屋|サイゼリヤ|ガスト|UBER|出前館|カフェ|珈琲/i, K_VAR, '☕ 外食・カフェ'],
+  [/PASMO|SUICA|JR|タクシー|メトロ|鉄道|バス/i, K_VAR, '🚃 交通費'],
+  [/マツモトキヨシ|ウエルシア|ツルハ|スギ薬局|サンドラッグ|無印良品|ダイソー|セリア|ニトリ|AMAZON/i, K_VAR, '🧴 日用品'],
+  [/病院|クリニック|医院|歯科|調剤/, K_VAR, '🏥 医療費'],
+  [/ユニクロ|UNIQLO|GU|しまむら|クリーニング|美容/i, K_VAR, '👕 衣服・美容'],
+];
+
+function learnedCategories() {
+  const exact = new Map(), prefix = new Map();
+  for (const e of entries.slice().sort(byDate)) {   // newest wins
+    if (!e.memo || e.kubun === K_INC) continue;
+    const n = norm(e.memo);
+    exact.set(n, e);
+    if (n.length >= 4) prefix.set(n.slice(0, 6), e);
+  }
+  return memo => {
+    const n = norm(memo);
+    const hit = exact.get(n) || (n.length >= 4 && prefix.get(n.slice(0, 6)));
+    if (hit) return { kubun: hit.kubun, himoku: hit.himoku, how: '過去の記録' };
+    for (const [re, kubun, himoku] of CARD_RULES) if (re.test(n) && itemsOf(kubun).includes(himoku)) return { kubun, himoku, how: '店名から推定' };
+    return { kubun: K_VAR, himoku: itemsOf(K_VAR).includes('❓ その他') ? '❓ その他' : itemsOf(K_VAR)[0], how: '' };
+  };
+}
+
+function parseCard(name, text) {
+  const rows = parseCsv(text), out = [];
+  if (rows[0]?.[0] === '利用日') {   // 楽天カード e-NAVI
+    for (const r of rows.slice(1)) {
+      const d = toYmd(r[0]), amt = toInt(r[4]);
+      if (d && amt) out.push({ date: d, memo: (r[1] || '').trim(), amount: amt, info: r[3] && r[3] !== '1回払い' ? r[3] : '' });
+    }
+    return { brand: '楽天カード', rows: out };
+  }
+  for (const r of rows) {           // 三井住友カード Vpass（1行目は名義、末尾はリボ等の合計行）
+    const d = toYmd(r[0]), amt = toInt(r[2]);
+    if (d && amt) out.push({ date: d, memo: (r[1] || '').trim(), amount: amt, info: r[3] ? `分割${toInt(r[3])}回の${toInt(r[4])}回目` : '' });
+  }
+  return { brand: '三井住友VISAカード', rows: out };
+}
+
+function guessMethod(file, parsed) {
+  // 1) the method used by matching records already in the app
+  const votes = {};
+  const idx = new Map();
+  entries.forEach(e => { if (e.method) idx.set(`${e.date}|${e.amount}|${norm(e.memo)}`, e.method); });
+  parsed.rows.forEach(r => { const m = idx.get(`${r.date}|${r.amount}|${norm(r.memo)}`); if (m) votes[m] = (votes[m] || 0) + 1; });
+  const best = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
+  if (best) return best[0];
+  // 2) remembered from a previous import of the same card
+  const token = cardToken(file.name);
+  if (cardMap[token]) return cardMap[token];
+  // 3) "(c)" / "(s)" in the file name
+  const methods = allMethods();
+  const suffix = /\(([a-z])\)/i.exec(file.name)?.[1]?.toUpperCase();
+  if (suffix && methods.includes(`${parsed.brand}(${suffix})`)) return `${parsed.brand}(${suffix})`;
+  return methods.find(m => m.startsWith(parsed.brand)) || '';
+}
+const cardToken = name => name.replace(/\d{6}/, '').replace(/\.csv$/i, '');   // drop the yyyymm part
+
+let importState = null;
+
+$('cardFile').onchange = async ev => {
+  const files = [...ev.target.files]; ev.target.value = '';
+  if (!files.length) return;
+  const classify = learnedCategories();
+  const blocks = [];
+  for (const file of files) {
+    const parsed = parseCard(file.name, await readText(file));
+    if (!parsed.rows.length) continue;
+    blocks.push({ name: file.name, token: cardToken(file.name), method: guessMethod(file, parsed),
+      rows: parsed.rows.map(r => ({ ...r, ...classify(r.memo), on: true })) });
+  }
+  if (!blocks.length) { alert('明細の行が見つかりませんでした。楽天カード（e-NAVI）か三井住友カード（Vpass）のCSVを選んでください。'); return; }
+  importState = blocks;
+  markDuplicates();
+  renderImport();
+};
+
+// rows already in the app (same 利用日|金額|支払方法|詳細) are unchecked.
+// Some older sheet rows have garbled store names ("ⅰ" saved as "�@"), so "�" + 1 char matches any one character.
+function markDuplicates() {
+  const have = {}, garbled = [];
+  entries.forEach(e => {
+    const k = dupKey(e.date, e.amount, e.method, e.memo);
+    have[k] = (have[k] || 0) + 1;
+    if (e.memo.includes('�')) garbled.push({ e, re: new RegExp('^' + e.memo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/�[\s\S]?/g, '.') + '$') });
+  });
+  const used = new Set();
+  for (const b of importState) for (const r of b.rows) {
+    const k = dupKey(r.date, r.amount, b.method, r.memo);
+    const g = !(have[k] > 0) && garbled.find(x => !used.has(x) && x.e.date === r.date && x.e.amount === r.amount &&
+      x.e.method === b.method && x.re.test(r.memo));
+    r.dup = have[k] > 0 || !!g;
+    if (have[k] > 0) have[k]--;
+    if (g) used.add(g);
+    r.on = !r.dup && !r.info.startsWith('分割');   // installments: check by hand to avoid double counting
+  }
+}
+
+function renderImport() {
+  const catOptions = KUBUNS.filter(k => k !== K_INC).map(k => `<optgroup label="${SHORT[k]}">${itemsOf(k)
+    .map(h => `<option value="${esc(k + '|' + h)}">${esc(h)}</option>`).join('')}</optgroup>`).join('');
+  const count = importState.reduce((s, b) => s + b.rows.filter(r => r.on).length, 0);
+  const dups = importState.reduce((s, b) => s + b.rows.filter(r => r.dup).length, 0);
+  openPanel(`<h3>カード明細の取り込み</h3>
+    <p class="note" style="margin-top:0">登録済み ${dups}件は除外しています。費目を確認してから取り込んでください。</p>
+    ${importState.map((b, i) => `<div class="section-title"><span>${esc(b.name)}</span></div>
+      <div class="field"><label>支払方法</label><select data-bm="${i}">${methodOptions(b.method, '（選択してください）')}</select></div>
+      <div class="list" style="background:var(--bg)">${b.rows.map((r, j) => `<div class="imp-row${r.dup ? ' dup' : ''}">
+        <input type="checkbox" data-on="${i}-${j}"${r.on ? ' checked' : ''}>
+        <div class="body"><div class="name">${esc(r.memo)}</div>
+          <small class="${!r.dup && !r.how ? 'unk' : ''}">${r.date.slice(5).replace('-', '/')}${r.info ? '・' + esc(r.info) : ''}・${
+            r.dup ? '登録済み' : r.info.startsWith('分割') ? '分割払い：取り込むか確認' : r.how || '要確認'}</small>
+          <select data-cat="${i}-${j}">${catOptions}</select></div>
+        <b>${yen(r.amount)}</b></div>`).join('')}</div>`).join('')}
+    <div class="actions" style="position:sticky;bottom:0;background:var(--card);padding-top:10px">
+      <button type="button" class="cancel" data-close>閉じる</button>
+      <button type="button" class="save" id="impGo">${count}件を取り込む</button></div>`);
+  const panel = $('panel');
+  panel.querySelectorAll('[data-cat]').forEach(s => {
+    const [i, j] = s.dataset.cat.split('-').map(Number), r = importState[i].rows[j];
+    s.value = r.kubun + '|' + r.himoku;
+    s.onchange = () => { const [k, ...h] = s.value.split('|'); r.kubun = k; r.himoku = h.join('|'); r.how = r.how || '手動'; };
+  });
+  panel.querySelectorAll('[data-on]').forEach(c => c.onchange = () => {
+    const [i, j] = c.dataset.on.split('-').map(Number);
+    importState[i].rows[j].on = c.checked;
+    $('impGo').textContent = `${importState.reduce((s, b) => s + b.rows.filter(r => r.on).length, 0)}件を取り込む`;
+  });
+  panel.querySelectorAll('[data-bm]').forEach(s => s.onchange = () => {
+    importState[+s.dataset.bm].method = s.value;
+    const top = panel.scrollTop;
+    markDuplicates(); renderImport(); $('panel').scrollTop = top;
+  });
+  $('impGo').onclick = () => {
+    if (importState.some(b => !b.method && b.rows.some(r => r.on))) { alert('支払方法を選んでください。'); return; }
+    let n = 0;
+    for (const b of importState) {
+      cardMap[b.token] = b.method;
+      for (const r of b.rows) if (r.on) {
+        entries.push({ id: newId(), created: Date.now(), date: r.date, amount: r.amount, kubun: r.kubun, himoku: r.himoku,
+          method: b.method, memo: r.memo, satisfaction: 'ー', source: 'カードCSV' });
+        n++;
+      }
+    }
+    write(KEY_CARDMAP, cardMap);
+    persist(); markDirty(); closePanel(); render(); sync();
+    alert(`${n}件を取り込みました。`);
+  };
+}
+
+// ---- entry form ----
+const kindOf = k => k === K_INC ? 'income' : k === K_SAVE ? 'saving' : 'expense';
+const KIND_KUBUN = { income: K_INC, saving: K_SAVE };
+
+function setKubun(k) {
+  f.kubun = k;
+  const kind = kindOf(k);
+  document.querySelectorAll('#kindSeg button').forEach(b => b.classList.toggle('on', b.dataset.kind === kind));
+  document.querySelectorAll('#subSeg button').forEach(b => b.classList.toggle('on', b.dataset.kubun === k));
+  $('subSeg').style.display = kind === 'expense' ? '' : 'none';
+  $('satField').style.display = kind === 'expense' ? '' : 'none';
+  const cats = itemsOf(k);
+  if (!cats.includes(f.himoku)) f.himoku = cats[0] || '';
+  $('fCats').innerHTML = cats.map(c => `<button type="button" class="${c === f.himoku ? 'on' : ''}">${esc(c)}</button>`).join('');
+  setHimoku(f.himoku);
+}
+// choosing a 費目 shows its description and, for new records, fills in its usual payment method
+function setHimoku(h, fillMethod) {
+  f.himoku = h;
+  const it = itemOf(f.kubun, h);
+  $('fHint').textContent = it?.note || '';
+  if (fillMethod && it?.methods[0]) $('fMethod').innerHTML = methodOptions(it.methods[0]);
+}
+function setSat(s) {
+  f.sat = s;
+  document.querySelectorAll('#satSeg button').forEach(b => b.classList.toggle('on', b.dataset.sat === s));
+}
+
+function openForm(entry) {
+  editing = entry ? entry.id : null;
+  f.himoku = entry ? entry.himoku : '';
+  $('fMethod').innerHTML = methodOptions(entry ? entry.method : lastUsed.method);
+  setKubun(entry ? entry.kubun : lastUsed.kubun);
+  if (!entry) setHimoku(f.himoku, true);
+  setSat(entry ? entry.satisfaction : 'ー');
+  $('fAmount').value = entry ? num(entry.amount) : '';
+  const today = new Date();
+  const sameMonth = today.getFullYear() === cur.getFullYear() && today.getMonth() === cur.getMonth();
+  $('fDate').value = entry ? entry.date : ymd(sameMonth ? today : cur);
+  $('fMemo').value = entry ? entry.memo : '';
+  $('fDelete').style.display = entry ? '' : 'none';
+  $('sheetWrap').classList.add('open');
+  if (!entry) setTimeout(() => $('fAmount').focus(), 250);
+}
+function closeForm() { $('sheetWrap').classList.remove('open'); document.activeElement?.blur(); }
+
+$('kindSeg').onclick = e => {
+  const kind = e.target.dataset.kind;
+  if (kind) setKubun(KIND_KUBUN[kind] || (kindOf(f.kubun) === 'expense' ? f.kubun : K_VAR));
+};
+$('subSeg').onclick = e => { if (e.target.dataset.kubun) setKubun(e.target.dataset.kubun); };
+$('satSeg').onclick = e => { if (e.target.dataset.sat) setSat(e.target.dataset.sat); };
+$('fCats').onclick = e => {
+  if (e.target.tagName !== 'BUTTON') return;
+  $('fCats').querySelectorAll('button').forEach(b => b.classList.toggle('on', b === e.target));
+  setHimoku(e.target.textContent, !editing);
+};
+amountInput($('fAmount'));
+$('form').onsubmit = e => {
+  e.preventDefault();
+  const amount = toInt($('fAmount').value);
+  if (!amount) { $('fAmount').focus(); return; }
+  const data = { kubun: f.kubun, himoku: f.himoku, amount, date: $('fDate').value, method: $('fMethod').value,
+    memo: $('fMemo').value.trim(), satisfaction: kindOf(f.kubun) === 'expense' ? f.sat : 'ー' };
+  if (editing) Object.assign(entries.find(x => x.id === editing), data);
+  else entries.push({ id: newId(), created: Date.now(), source: '手入力', ...data });
+  lastUsed = { kubun: data.kubun, method: data.method }; write(KEY_LAST, lastUsed);
+  persist(); markDirty();
+  const [y, m] = data.date.split('-').map(Number);
+  if (y !== cur.getFullYear() || m - 1 !== cur.getMonth()) { cur = new Date(y, m - 1, 1); weekSel = null; }
+  closeForm(); render(); sync();
+};
+$('fDelete').onclick = () => {
+  if (!confirm('この記録を削除しますか？')) return;
+  entries = entries.filter(x => x.id !== editing);
+  persist(); markDirty(); closeForm(); render(); sync();
+};
+$('fCancel').onclick = closeForm;
+$('sheetBg').onclick = closeForm;
+
+// ---- navigation ----
+function moveMonth(d) {
+  cur.setMonth(cur.getMonth() + (tab === 'year' ? 12 * d : d));
+  weekSel = null; render();
+}
+$('prev').onclick = () => moveMonth(-1);
+$('next').onclick = () => moveMonth(1);
+document.querySelector('.tabs').onclick = e => { if (e.target.dataset.tab) { tab = e.target.dataset.tab; render(); window.scrollTo(0, 0); } };
+$('add').onclick = () => openForm(null);
+$('main').addEventListener('click', e => {
+  const it = e.target.closest('.item');
+  if (it) openForm(entries.find(x => x.id === it.dataset.id));
+});
+
+window.addEventListener('online', () => sync());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(); });
+
+persist();
+render();
+sync();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+</script>
+</body>
+</html>
