@@ -1158,6 +1158,7 @@ function editPlan(p) {
 async function post(body) {
   const res = await fetch(cfg.url, { method: 'POST', body: JSON.stringify({ token: cfg.token, ...body }) });
   const data = await res.json();
+  if (data.error === 'busy') throw Object.assign(new Error('前の同期を処理中'), { busy: true });
   if (!data.ok) throw new Error(data.error === 'token' ? '合言葉が違います' : data.error);
   return data;
 }
@@ -1203,6 +1204,7 @@ async function sync({ manual = false, force = false } = {}) {
   } catch (err) {
     cfg.error = errMsg(err);
     if (manual) toast('同期に失敗しました：' + cfg.error);
+    if (err.busy) setTimeout(() => sync({ force: true }), 30000);   // the sheet is still busy with the previous sync
   } finally {
     syncing = false;
     saveCfg();
