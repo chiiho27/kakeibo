@@ -1029,9 +1029,10 @@ $('importFile').onchange = async ev => {
   const file = ev.target.files[0]; ev.target.value = '';
   if (!file) return;
   const rows = parseCsv(await readText(file));
-  const skip = rows[0]?.[0] === '取引ID' ? 1 : 0;   // older exports included 取引ID
   const added = [];
-  for (const r of rows.slice(1)) {
+  for (const r of rows) {
+    // 01_Raw_Data downloaded straight from the sheet has 取引ID in column A
+    const skip = !toYmd(r[0]) && toYmd(r[1]) ? 1 : 0;
     const [date, amount, kubun, himoku, method, memo, sat, source] = r.slice(skip);
     const d = toYmd(date), n = toInt(amount);
     if (!d || !n) continue;
