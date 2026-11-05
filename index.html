@@ -155,7 +155,8 @@ th { color: var(--sub); font-weight: 600; border-top: 0; font-size: 11px; }
 th:first-child, td:first-child { position: sticky; left: 0; background: var(--card); text-align: left; max-width: 128px;
   overflow: hidden; text-overflow: ellipsis; }
 tr.grp td { font-weight: 700; }
-tr.grp td:first-child { display: flex; align-items: center; gap: 6px; }
+/* flex goes on an inner span: a flex <td> stops being a table cell and loses position: sticky */
+tr.grp td:first-child span { display: flex; align-items: center; gap: 6px; }
 tr.total td { font-weight: 700; background: var(--chip); }
 tr.total td:first-child { background: var(--chip); }
 .mbars { padding: 6px 16px 14px; display: grid; gap: 8px; }
@@ -703,7 +704,7 @@ function renderYear() {
   const balance = months.map((_, i) => totals[0][i] - outTotal[i]);
   let body = `<tr class="total"><td>収支</td>${cells(balance)}</tr>`;
   for (const [ki, k] of KUBUNS.entries()) {
-    body += `<tr class="grp"><td><i class="dot" style="background:${kcolor(k)}"></i>${SHORT[k]}</td>${cells(totals[ki])}</tr>`;
+    body += `<tr class="grp"><td><span><i class="dot" style="background:${kcolor(k)}"></i>${SHORT[k]}</span></td>${cells(totals[ki])}</tr>`;
     for (const h of itemsOf(k)) {
       const vals = data.map(m => m.by[k]?.[h] || 0);
       if (vals.some(Boolean)) body += `<tr><td>${esc(h)}</td>${cells(vals)}</tr>`;
