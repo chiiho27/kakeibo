@@ -591,6 +591,14 @@ function segThumb(seg) {
   if (on) { t.style.left = on.offsetLeft + 'px'; t.style.width = on.offsetWidth + 'px'; }
 }
 
+function placeTabInd() {
+  const active = document.querySelector('.tabbar .on'), ind = $('tabInd');
+  ind.style.opacity = active ? 1 : 0;
+  if (active) ind.style.transform = `translateX(${active.offsetLeft + active.offsetWidth / 2 - 11}px)`;
+}
+// rotating the phone changes button widths: re-place the tab marker and the segment thumbs
+addEventListener('resize', () => { placeTabInd(); document.querySelectorAll('.seg').forEach(segThumb); });
+
 // ---- toast ----
 let toastTimer;
 function toast(msg, action) {
@@ -614,9 +622,7 @@ function render(anim) {
   $('syncLine').textContent = cfg.url && (isDirty() || cfg.error)
     ? `スプレッドシート未反映の変更あり${cfg.error ? '（' + cfg.error + '）' : ''}` : '';
   document.querySelectorAll('.tabbar [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
-  const active = document.querySelector('.tabbar .on'), ind = $('tabInd');
-  ind.style.opacity = active ? 1 : 0;
-  if (active) ind.style.transform = `translateX(${active.offsetLeft + active.offsetWidth / 2 - 11}px)`;
+  placeTabInd();
   // anim: undefined = update in place (after saving etc.), 'enter' = blocks rise in, 'slide-l' / 'slide-r' = month change
   const main = $('main');
   main.className = '';
@@ -899,7 +905,7 @@ function renderYear() {
   const cells = (vals, prev, upGood) => !diffMode
     ? vals.map(v => `<td>${v ? num(v) : ''}</td>`).join('') + `<td>${num(avg(vals))}</td>`
     : vals.map((v, i) => started[i] && (v || prev[i]) ? diffCell(v - prev[i], upGood) : '<td></td>').join('') +
-      diffCell(Math.round(avg(vals) - avg(prev)), upGood);
+      (avg(vals) || avg(prev) ? diffCell(Math.round(avg(vals) - avg(prev)), upGood) : '<td></td>');
   const head = `<tr><th>項目</th>${months.map(d => `<th>${d.getMonth() + 1}月</th>`).join('')}<th>月平均</th></tr>`;
 
   const totalsOf = ds => KUBUNS.map(k => ds.map(m => m.sum[k] || 0));
