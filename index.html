@@ -21,6 +21,7 @@
   --accent: var(--c1-ink); --on-accent: #fff;
   --shadow: 0 1px 2px rgba(60,50,40,.05), 0 6px 20px rgba(60,50,40,.05);
   --r: 18px;
+  --ease: cubic-bezier(.2,.8,.2,1); --spring: cubic-bezier(.34,1.56,.64,1); --sheet-ease: cubic-bezier(.32,.72,0,1);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -36,10 +37,12 @@ html, body { margin: 0; background: var(--bg); color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
 body { padding: env(safe-area-inset-top) 0 calc(88px + env(safe-area-inset-bottom)); overscroll-behavior-y: none; }
 button, input, select { font: inherit; color: inherit; }
-button { cursor: pointer; border: 0; background: none; padding: 0; }
-button:active { opacity: .7; }
+button { cursor: pointer; border: 0; background: none; padding: 0; transition: transform .16s var(--ease), background-color .25s, color .25s; }
+button:active { transform: scale(.94); }
+.row:active, .item:active, .bar-row:active, details summary:active { transform: scale(.985); }
 .num { font-variant-numeric: tabular-nums; }
 .neg { color: var(--c3-ink) !important; }
+.up { color: var(--c1-ink) !important; }
 .muted { color: var(--sub); font-size: 12px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
 
@@ -53,11 +56,46 @@ header .gear.on { color: var(--accent); }
 .syncline { font-size: 11px; color: var(--c4-ink); text-align: center; margin: -4px 16px 4px; }
 .syncline:empty { display: none; }
 
-main { padding: 4px 16px 16px; animation: fade .18s ease; }
-main.slide-l { animation: slideL .22s ease; } main.slide-r { animation: slideR .22s ease; }
-@keyframes fade { from { opacity: 0; } }
-@keyframes slideL { from { opacity: 0; transform: translateX(24px); } }
-@keyframes slideR { from { opacity: 0; transform: translateX(-24px); } }
+main { padding: 4px 16px 16px; }
+main.slide-l { animation: slideL .32s var(--ease); } main.slide-r { animation: slideR .32s var(--ease); }
+@keyframes slideL { from { opacity: 0; transform: translateX(28px); } }
+@keyframes slideR { from { opacity: 0; transform: translateX(-28px); } }
+
+/* entrance: blocks rise one after another (--i is set from JS), then the details inside them */
+main.enter > *, .day.enter { animation: rise .5s var(--ease) backwards; animation-delay: calc(var(--i, 0) * 45ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+main.enter .cal button { animation: pop .42s var(--spring) backwards; animation-delay: calc(140ms + var(--d, 0) * 11ms); }
+@keyframes pop { from { opacity: 0; transform: scale(.55); } }
+main.enter .bar i, main.enter .mbar .tracks i, main.enter .satbar i { transform-origin: left; animation: grow .8s var(--ease) backwards; animation-delay: calc(120ms + var(--i, 0) * 45ms); }
+@keyframes grow { from { transform: scaleX(0); } }
+.arc.anim { animation: draw 1s var(--ease) backwards; }
+@keyframes draw { from { stroke-dashoffset: var(--from); } }
+.bump { animation: bump .2s var(--ease); }
+@keyframes bump { 50% { transform: scale(1.05); } }
+
+/* skeleton shown over the whole screen while the app starts */
+#skel { position: fixed; inset: 0; z-index: 50; background: var(--bg); padding: env(safe-area-inset-top) 0 0;
+  transition: opacity .4s var(--ease), visibility .4s; }
+#skel.done { opacity: 0; visibility: hidden; }
+.sk, .sk-cal i, .sk-tab i { display: block; border-radius: 8px;
+  background: linear-gradient(100deg, var(--chip) 30%, var(--line) 50%, var(--chip) 70%) 0 0 / 300% 100%; animation: shimmer 1.4s linear infinite; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.sk-head { height: 56px; display: grid; place-items: center; }
+.sk-main { padding: 4px 16px; display: grid; gap: 12px; }
+.sk-card { background: var(--card); border-radius: var(--r); padding: 18px; display: flex; gap: 16px; align-items: center; }
+.sk-card > div { flex: 1; display: grid; gap: 8px; }
+.sk-ring { width: 104px; height: 104px; border-radius: 50%; flex: none; }
+.sk-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sk-stats .sk { height: 52px; border-radius: 14px; }
+.sk-cal { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.sk-cal i { aspect-ratio: 1 / 1.08; border-radius: 10px; }
+.sk-tab { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr); justify-items: center;
+  padding: 12px 8px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.sk-tab i { width: 26px; height: 26px; border-radius: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
+}
 
 .card { background: var(--card); border-radius: var(--r); box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
 .card-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 6px; }
@@ -109,6 +147,17 @@ details.fold[open] summary::after { transform: rotate(90deg); }
 .pill { flex: none; display: flex; align-items: center; gap: 6px; border-radius: 999px; padding: 7px 12px; font-size: 13px;
   background: var(--chip); color: var(--text); white-space: nowrap; }
 .pill.on { background: var(--text); color: var(--bg); }
+
+/* home extras */
+.banner { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 12px 16px; font-size: 13px;
+  background: color-mix(in srgb, var(--c4) 22%, var(--card)); color: var(--c4-ink); font-weight: 600; }
+.sat3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 4px 16px 10px; }
+.sat3 div { border-radius: 12px; padding: 8px 10px; background: var(--chip); }
+.sat3 span { font-size: 12px; color: var(--sub); }
+.sat3 b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
+.satbar { display: flex; height: 6px; margin: 0 16px 12px; border-radius: 3px; overflow: hidden; background: var(--chip); }
+.satbar i { display: block; height: 100%; }
+.sat-head { font-size: 12px; color: var(--sub); font-weight: 600; padding: 6px 16px 2px; }
 
 /* bars */
 .bar-row { padding: 11px 16px; border-top: 1px solid var(--line); }
@@ -199,6 +248,13 @@ tr.total td:first-child { background: var(--chip); }
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border-top: 1px solid var(--line); }
 .tabbar button { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: var(--sub); padding: 4px 0; }
 .tabbar button.on { color: var(--accent); }
+.tabbar button.on svg { animation: hop .45s var(--spring); }
+@keyframes hop { 40% { transform: translateY(-4px) scale(1.08); } }
+.tab-ind { position: absolute; top: -1px; left: 0; width: 22px; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent);
+  transition: transform .45s var(--spring), opacity .2s; }
+.tabbar .addbtn span { transition: transform .3s var(--spring); }
+.tabbar .addbtn:active { transform: none; }
+.tabbar .addbtn:active span { transform: scale(.88) rotate(90deg); }
 .tabbar .addbtn { align-self: center; }
 .tabbar .addbtn span { width: 52px; height: 52px; border-radius: 26px; background: var(--accent); color: var(--on-accent);
   display: grid; place-items: center; box-shadow: 0 6px 16px rgba(60,80,65,.28); margin-top: -18px; }
@@ -206,31 +262,40 @@ tr.total td:first-child { background: var(--chip); }
 /* toast */
 .toast { position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); z-index: 40;
   background: var(--text); color: var(--bg); border-radius: 14px; padding: 11px 16px; font-size: 14px; display: flex; gap: 16px;
-  align-items: center; opacity: 0; pointer-events: none; transition: all .22s ease; max-width: calc(100% - 32px); white-space: nowrap; }
+  align-items: center; opacity: 0; pointer-events: none; transition: opacity .2s, transform .45s var(--spring); max-width: calc(100% - 32px); white-space: nowrap; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast::after { content: ''; position: absolute; left: 14px; right: 14px; bottom: 4px; height: 2px; border-radius: 1px;
+  background: currentColor; opacity: .25; transform-origin: left; transform: scaleX(0); }
+.toast.show.timed::after { animation: drain var(--t, 5s) linear forwards; }
+@keyframes drain { from { transform: scaleX(1); } }
 .toast button { color: var(--c1); font-weight: 700; }
 
 /* sheets */
-.sheet-bg { position: fixed; inset: 0; background: rgba(30,25,20,.32); z-index: 20; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.sheet-bg { position: fixed; inset: 0; background: rgba(30,25,20,.32); z-index: 20; opacity: 0; pointer-events: none; transition: opacity .3s; }
 .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--card); border-radius: 22px 22px 0 0;
-  padding: 6px 16px calc(14px + env(safe-area-inset-bottom)); transform: translateY(105%); transition: transform .26s cubic-bezier(.2,.8,.2,1);
+  padding: 6px 16px calc(14px + env(safe-area-inset-bottom)); transform: translateY(105%); transition: transform .45s var(--sheet-ease);
   max-height: 94vh; overflow-y: auto; }
+.open > .sheet > * { animation: rise .45s var(--ease) backwards; animation-delay: calc(60ms + var(--i, 0) * 30ms); }
 .open > .sheet-bg { opacity: 1; pointer-events: auto; }
 .open > .sheet { transform: none; }
 .grip { width: 38px; height: 5px; border-radius: 3px; background: var(--line); margin: 4px auto 12px; }
 .sheet h3 { margin: 0 0 12px; font-size: 17px; }
-.seg { display: flex; background: var(--chip); border-radius: 12px; padding: 3px; }
+.seg { position: relative; display: flex; background: var(--chip); border-radius: 12px; padding: 3px; }
 .seg + .seg { margin-top: 6px; }
-.seg button { flex: 1; padding: 8px 0; border-radius: 9px; font-size: 14px; color: var(--sub); }
+.seg button { position: relative; z-index: 1; flex: 1; padding: 8px 0; border-radius: 9px; font-size: 14px; color: var(--sub); }
 .seg.small button { padding: 5px 0; font-size: 12.5px; }
-.seg button.on { background: var(--card); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.seg button.on { color: var(--text); font-weight: 600; }
+/* the white "thumb" slides to the selected button (positioned from JS) */
+.seg .thumb { position: absolute; top: 3px; bottom: 3px; left: 3px; width: 0; border-radius: 9px; background: var(--card);
+  box-shadow: 0 1px 3px rgba(0,0,0,.08); transition: left .4s var(--spring), width .4s var(--spring); }
 .amount { display: flex; align-items: baseline; justify-content: flex-end; gap: 4px; padding: 12px 4px 4px; }
 .amount .yen { font-size: 22px; color: var(--sub); }
 .amount .val { font-size: 38px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
 .expr { text-align: right; font-size: 12px; color: var(--sub); min-height: 16px; padding: 0 4px; font-variant-numeric: tabular-nums; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
 .chips button { border-radius: 999px; padding: 7px 11px; font-size: 13.5px; background: var(--chip); }
-.chips button.on { background: var(--kc, var(--accent)); color: #fff; }
+.chips button.on { background: var(--kc, var(--accent)); color: #fff; animation: pick .35s var(--spring); }
+@keyframes pick { 50% { transform: scale(1.08); } }
 @media (prefers-color-scheme: dark) { .chips button.on { color: #1C1B19; } }
 .hint { font-size: 11.5px; color: var(--sub); margin: 2px 4px 6px; min-height: 1em; }
 .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 6px; }
@@ -270,6 +335,17 @@ tr.total td:first-child { background: var(--chip); }
 </style>
 </head>
 <body>
+<div id="skel" aria-hidden="true">
+  <div class="sk-head"><i class="sk" style="width:120px;height:20px"></i></div>
+  <div class="sk-main">
+    <div class="sk-card"><i class="sk sk-ring"></i><div><i class="sk" style="width:60%;height:12px"></i><i class="sk" style="width:85%;height:30px"></i><i class="sk" style="width:50%;height:12px"></i></div></div>
+    <div class="sk-stats"><i class="sk"></i><i class="sk"></i><i class="sk"></i></div>
+    <div class="sk-card"><div><i class="sk" style="width:40%;height:14px"></i></div></div>
+    <div class="sk-card"><div class="sk-cal" id="skCal"></div></div>
+  </div>
+  <div class="sk-tab"><i></i><i></i><i style="width:44px;height:44px;border-radius:22px;margin-top:-10px"></i><i></i><i></i></div>
+</div>
+<script>document.getElementById('skCal').innerHTML = '<i></i>'.repeat(35);</script>
 <header>
   <button class="nav" id="prev" aria-label="前へ">‹</button>
   <button class="mlabel" id="monthLabel" aria-label="今月に戻る"></button>
@@ -283,6 +359,7 @@ tr.total td:first-child { background: var(--chip); }
 <main id="main"></main>
 
 <nav class="tabbar">
+  <i class="tab-ind" id="tabInd"></i>
   <button data-tab="home"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3.5 10.5 12 3.5l8.5 7V20a.5.5 0 0 1-.5.5h-5v-6H9v6H4a.5.5 0 0 1-.5-.5z"/></svg>ホーム</button>
   <button data-tab="list"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></svg>明細</button>
   <button class="addbtn" id="add" aria-label="記録する"><span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
@@ -313,13 +390,13 @@ tr.total td:first-child { background: var(--chip); }
     <div class="fields">
       <label class="fld"><span>日付</span><input type="date" id="fDate" required></label>
       <label class="fld"><span>支払方法</span><select id="fMethod"></select></label>
-      <label class="fld wide"><span>詳細</span><input id="fMemo" placeholder="お店・メモ（任意）" enterkeyhint="done"></label>
+      <label class="fld wide"><span>詳細</span><input id="fMemo" placeholder="お店・メモ" enterkeyhint="done"></label>
     </div>
     <div class="satrow" id="satField"><span>満足度</span>
       <div class="seg small" id="satSeg">
-        <button type="button" data-sat="◯">◯ よかった</button>
+        <button type="button" data-sat="◯">◯</button>
         <button type="button" data-sat="△">△</button>
-        <button type="button" data-sat="✕">✕ 反省</button>
+        <button type="button" data-sat="✕">✕</button>
         <button type="button" data-sat="ー">ー</button>
       </div>
     </div>
@@ -398,6 +475,7 @@ let tab = 'home';
 let weekSel = null;
 let homeSeg = null;
 let listFilter = 'all', listQuery = '';
+let yearMode = 'value';
 let editing = null;
 const f = { kubun: K_VAR, himoku: '', sat: 'ー', parts: [''] };
 
@@ -469,24 +547,70 @@ function weeksOf(y, m) {
   return weeks;
 }
 
-function ring(pct, color, size = 104, stroke = 10) {
-  const r = (size - stroke) / 2, c = 2 * Math.PI * r, p = Math.max(0, Math.min(pct, 1));
+// ---- motion helpers ----
+// Values shown last time, per key, so rings and numbers move from where they were (e.g. after saving a record).
+const shownNum = {}, shownRing = {};
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+function ring(pct, color, key, size = 104, stroke = 10) {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r, p = Math.max(0, Math.min(pct, 1)), off = c * (1 - p);
+  const from = shownRing[key] ?? c;
+  shownRing[key] = off;
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">
     <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--chip)" stroke-width="${stroke}"/>
-    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round"
-      stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - p)}" transform="rotate(-90 ${size / 2} ${size / 2})"
-      style="transition:stroke-dashoffset .5s ease"/></svg>`;
+    <circle class="arc${Math.abs(from - off) > .5 ? ' anim' : ''}" style="--from:${from}" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none"
+      stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"
+      transform="rotate(-90 ${size / 2} ${size / 2})"/></svg>`;
 }
+
+// <b data-count="key" data-v="123">¥123</b> counts from the previously shown value to the new one
+const countFmt = { yen, pct: v => Math.round(v) + '%' };
+function countUp(root) {
+  root.querySelectorAll('[data-count]').forEach(el => {
+    const key = el.dataset.count, to = Number(el.dataset.v), from = shownNum[key] ?? 0, fmt = countFmt[el.dataset.fmt || 'yen'];
+    shownNum[key] = to;
+    if (from === to || reduceMotion.matches) return;
+    const t0 = performance.now(), dur = 800;
+    const step = now => {
+      const p = Math.min((now - t0) / dur, 1), e = 1 - Math.pow(1 - p, 4);
+      el.textContent = fmt(from + (to - from) * e);
+      if (p < 1 && el.isConnected) requestAnimationFrame(step);
+    };
+    el.textContent = fmt(from);
+    requestAnimationFrame(step);
+  });
+}
+const counted = (key, v, fmt = 'yen') => `data-count="${key}" data-v="${Math.round(v)}" data-fmt="${fmt}"`;
+
+// segmented controls: move the sliding thumb under the selected button
+function segThumb(seg) {
+  const t = seg.querySelector('.thumb') || seg.insertBefore(document.createElement('i'), seg.firstChild);
+  t.className = 'thumb';
+  const on = seg.querySelector('button.on');
+  t.style.opacity = on ? 1 : 0;
+  if (on) { t.style.left = on.offsetLeft + 'px'; t.style.width = on.offsetWidth + 'px'; }
+}
+
+function placeTabInd() {
+  const active = document.querySelector('.tabbar .on'), ind = $('tabInd');
+  ind.style.opacity = active ? 1 : 0;
+  if (active) ind.style.transform = `translateX(${active.offsetLeft + active.offsetWidth / 2 - 11}px)`;
+}
+// rotating the phone changes button widths: re-place the tab marker and the segment thumbs
+addEventListener('resize', () => { placeTabInd(); document.querySelectorAll('.seg').forEach(segThumb); });
 
 // ---- toast ----
 let toastTimer;
 function toast(msg, action) {
-  const t = $('toast');
+  const t = $('toast'), ms = action ? 5000 : 2200;
   t.innerHTML = `<span>${esc(msg)}</span>${action ? `<button type="button">${esc(action.label)}</button>` : ''}`;
   if (action) t.querySelector('button').onclick = () => { t.classList.remove('show'); action.run(); };
+  t.classList.remove('show', 'timed'); void t.offsetWidth;
+  t.style.setProperty('--t', ms + 'ms');
   t.classList.add('show');
+  t.classList.toggle('timed', !!action);   // a thin line drains while "元に戻す" is still available
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), action ? 5000 : 2200);
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }
 
 // ---- render ----
@@ -498,11 +622,16 @@ function render(anim) {
   $('syncLine').textContent = cfg.url && (isDirty() || cfg.error)
     ? `スプレッドシート未反映の変更あり${cfg.error ? '（' + cfg.error + '）' : ''}` : '';
   document.querySelectorAll('.tabbar [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  placeTabInd();
+  // anim: undefined = update in place (after saving etc.), 'enter' = blocks rise in, 'slide-l' / 'slide-r' = month change
   const main = $('main');
   main.className = '';
   void main.offsetWidth;
-  main.className = anim || '';
+  main.className = anim ? `enter ${anim === 'enter' ? '' : anim}` : '';
   ({ home: renderHome, list: renderList, week: renderWeek, year: renderYear, settings: renderSettings })[tab]();
+  [...main.children].forEach((el, i) => el.style.setProperty('--i', i));
+  main.querySelectorAll('.seg').forEach(segThumb);
+  countUp(main);
 }
 
 // one row of "actual vs budget"
@@ -550,23 +679,23 @@ function renderHome() {
   for (let day = 1; day <= n; day++) {
     const ds = `${mk}-${pad(day)}`, amt = daily[ds] || 0, past = ds < today;
     if (past && !amt) noSpend++;
-    cal += `<button data-day="${ds}" class="${ds === today ? 'today' : ''}${ds > today ? ' future' : ''}"><span class="dn">${day}</span>${
+    cal += `<button data-day="${ds}" style="--d:${day + offset}" class="${ds === today ? 'today' : ''}${ds > today ? ' future' : ''}"><span class="dn">${day}</span>${
       amt ? `<span class="dv">${num(amt)}</span>` : past ? `<span class="ds">${st[(weekOfDay[day] - 1) % st.length]}</span>` : '<span></span>'}</button>`;
   }
 
   const segs = [K_VAR, K_FIX, K_SP, K_SAVE, K_INC];
-  $('main').innerHTML = `
+  $('main').innerHTML = `${backupBanner()}
     <section class="card hero">
-      <div class="ring-wrap">${ring(pct, rest < 0 ? 'var(--c3-ink)' : 'var(--c1)')}
-        <div class="ring-label"><small>使った</small><b>${Math.round(pct * 100)}%</b></div></div>
+      <div class="ring-wrap">${ring(pct, rest < 0 ? 'var(--c3-ink)' : 'var(--c1)', 'home')}
+        <div class="ring-label"><small>使った</small><b ${counted('home-pct', pct * 100, 'pct')}>${Math.round(pct * 100)}%</b></div></div>
       <div class="hero-text"><small>${thisMonth ? '今月あと使えるお金' : 'やりくりの残り'}</small>
-        <div class="big ${rest < 0 ? 'neg' : ''}">${yen(rest)}</div>
-        <div class="sub">${thisMonth && rest > 0 ? `1日あたり <b class="num">${yen(rest / daysLeft)}</b>・あと${daysLeft}日<br>` : ''}やりくり予算 ${yen(d)}</div></div>
+        <div class="big ${rest < 0 ? 'neg' : ''}" ${counted('home-rest', rest)}>${yen(rest)}</div>
+        <div class="sub">${thisMonth && rest > 0 ? `1日あたり <b class="num" ${counted('home-day', rest / daysLeft)}>${yen(rest / daysLeft)}</b>・あと${daysLeft}日<br>` : ''}やりくり予算 ${yen(d)}</div></div>
     </section>
     <div class="stats">
-      <div><small>収入</small><b>${yen(a)}</b></div>
-      <div><small>支出・貯蓄</small><b>${yen(out)}</b></div>
-      <div><small>収支</small><b class="${a - out < 0 ? 'neg' : ''}">${yen(a - out)}</b></div>
+      <div><small>収入</small><b ${counted('home-a', a)}>${yen(a)}</b></div>
+      <div><small>支出・貯蓄</small><b ${counted('home-out', out)}>${yen(out)}</b></div>
+      <div><small>収支</small><b class="${a - out < 0 ? 'neg' : ''}" ${counted('home-bal', a - out)}>${yen(a - out)}</b></div>
     </div>
     <details class="card fold"><summary>やりくり予算の内訳<span>${yen(d)}</span></summary>
       <div class="kv"><span>収入 (a)</span><span>${yen(a)}</span></div>
@@ -587,10 +716,13 @@ function renderHome() {
         <i class="dot" style="background:${kcolor(k)}"></i>${PILL[k]}</button>`).join('')}</div>
       ${homeSeg === K_SP ? `<div class="card-head"><h3>特別費の予定</h3><button id="addPlan">＋ 追加</button></div>
         ${plan.map(p => `<button class="row nav" data-plan="${p.id}"><span class="l"><span>${esc(p.name)}${
-          p.note ? ` <small class="muted">${esc(p.note)}</small>` : ''}</span></span><span class="r">${yen(p.budget)}</span></button>`).join('') ||
-          '<p class="note" style="margin:0 16px 10px">固定資産税や年会費など、今月の予定を入れておくと予算になります</p>'}` : ''}
+          p.note ? ` <small class="muted">${esc(p.note)}</small>` : ''}</span></span><span class="r">${yen(p.budget)}</span></button>`).join('')}` : ''}
+      ${homeSeg === K_FIX || homeSeg === K_SAVE ? '<div class="card-head" style="justify-content:flex-end;padding-top:8px"><button id="copyPrev">先月から複製</button></div>' : ''}
       ${budgetList(homeSeg, by[homeSeg], homeSeg === K_SP && plan.length ? plan.reduce((t, p) => t + p.budget, 0) : undefined)}
-    </section>`;
+    </section>
+    ${satisfactionCard(list)}`;
+  $('bkBtn') && ($('bkBtn').onclick = () => cfg.url ? sync({ manual: true }) : exportCsv());
+  $('copyPrev') && ($('copyPrev').onclick = () => copyPrev(homeSeg));
   $('main').querySelector('.cal').onclick = e => {
     const btn = e.target.closest('[data-day]');
     if (!btn || !daily[btn.dataset.day]) return;
@@ -598,15 +730,84 @@ function renderHome() {
     tab = 'list'; render();
     $('d-' + btn.dataset.day)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
-  $('main').querySelectorAll('[data-hs]').forEach(b => b.onclick = () => { homeSeg = b.dataset.hs; render(); });
+  $('main').querySelectorAll('[data-hs]').forEach(b => b.onclick = () => {
+    homeSeg = b.dataset.hs;
+    const y0 = window.scrollY, x0 = b.parentNode.scrollLeft;
+    render();
+    window.scrollTo(0, y0);
+    const card = $('main').querySelector('.hscroll').closest('.card');
+    card.querySelector('.hscroll').scrollLeft = x0;
+    if (reduceMotion.matches) return;
+    card.animate([{ opacity: .4, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    card.querySelectorAll('.bar i').forEach((bar, i) => bar.animate([{ transform: 'scaleX(0)' }, { transform: 'none' }],
+      { duration: 700, delay: 60 + i * 35, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' }));
+  });
   $('addPlan') && ($('addPlan').onclick = () => editPlan(null));
   $('main').querySelectorAll('[data-plan]').forEach(b => b.onclick = () => editPlan(plan.find(p => p.id === b.dataset.plan)));
+}
+
+// shown on home when the records exist only on this phone and have not been backed up for 30 days
+// (or, with sheet sync set up, when the last successful sync is over 7 days old)
+function backupBanner() {
+  if (!entries.length) return '';
+  const days = t => Math.floor((Date.now() - t) / 864e5);
+  if (cfg.url) return cfg.lastSync && days(cfg.lastSync) >= 7
+    ? `<button class="card banner" id="bkBtn"><span>最終同期 ${days(cfg.lastSync)}日前</span><span>同期 ›</span></button>` : '';
+  if (prefs.lastBackup && days(prefs.lastBackup) < 30) return '';
+  return `<button class="card banner" id="bkBtn"><span>バックアップ ${prefs.lastBackup ? days(prefs.lastBackup) + '日前' : 'なし'}</span><span>書き出す ›</span></button>`;
+}
+
+const SAT = [['◯', 'var(--c1)'], ['△', 'var(--c4)'], ['✕', 'var(--c3)']];
+function satisfactionCard(list) {
+  const rated = list.filter(e => (e.kubun === K_VAR || e.kubun === K_SP) && SAT.some(([s]) => s === e.satisfaction));
+  if (!rated.length) return '';
+  const sum = s => rated.filter(e => e.satisfaction === s).reduce((t, e) => t + e.amount, 0);
+  const total = rated.reduce((t, e) => t + e.amount, 0);
+  const bad = rated.filter(e => e.satisfaction === '✕').sort((a, b) => b.amount - a.amount).slice(0, 5);
+  return `<section class="card">
+    <div class="card-head"><h3>満足度</h3></div>
+    <div class="sat3">${SAT.map(([s, c]) => `<div><span style="color:${c}">${s}</span> <span>${rated.filter(e => e.satisfaction === s).length}件</span><b>${yen(sum(s))}</b></div>`).join('')}</div>
+    <div class="satbar">${SAT.map(([s, c]) => `<i style="width:${sum(s) / total * 100}%;background:${c}"></i>`).join('')}</div>
+    ${bad.length ? `<div class="sat-head">✕ の大きい順</div>${bad.map(e => `<button class="item" data-id="${e.id}"><i class="dot" style="background:var(--c3)"></i>
+      <div class="body"><div class="t">${esc(e.memo || e.himoku)}</div><div class="s">${esc(`${+e.date.slice(5, 7)}/${+e.date.slice(8)}・${e.himoku}`)}</div></div>
+      <div class="amt">${yen(e.amount)}</div></button>`).join('')}` : ''}
+  </section>`;
+}
+
+// copies last month's 固定費 / 先取り貯金 records into this month (same day, clamped to the month's length)
+function copyPrev(kubun) {
+  const y = cur.getFullYear(), mo = cur.getMonth(), n = daysIn(y, mo), prev = new Date(y, mo - 1, 1), mk = monthKey();
+  const have = new Set(monthEntries(mk).filter(e => e.kubun === kubun).map(e => e.himoku + '|' + e.amount));
+  const rows = monthEntries(mkOf(prev)).filter(e => e.kubun === kubun).sort(byDate).map(e => ({
+    e, date: `${mk}-${pad(Math.min(+e.date.slice(8), n))}`, dup: have.has(e.himoku + '|' + e.amount) }));
+  rows.forEach(r => r.on = !r.dup);
+  if (!rows.length) { toast(`${prev.getMonth() + 1}月の${SHORT[kubun]}はありません`); return; }
+  openPanel(`<h3>${prev.getMonth() + 1}月の${SHORT[kubun]}を複製</h3>
+    <div class="card" style="box-shadow:none;border:1px solid var(--line)">${rows.map((r, i) => `<label class="imp-row${r.dup ? ' dup' : ''}">
+      <input type="checkbox" data-cp="${i}"${r.on ? ' checked' : ''}>
+      <div class="body"><div class="name">${esc(r.e.himoku)}</div>
+        <small>${esc([r.date.slice(5).replace('-', '/'), r.e.method, r.e.memo, r.dup ? '登録済み' : ''].filter(Boolean).join('・'))}</small></div>
+      <b>${yen(r.e.amount)}</b></label>`).join('')}</div>
+    <div class="actions sticky-actions"><button type="button" data-close>閉じる</button><button type="button" class="save" id="cpGo"></button></div>`);
+  const label = () => $('cpGo').textContent = `${rows.filter(r => r.on).length}件を追加`;
+  label();
+  $('panel').querySelectorAll('[data-cp]').forEach(c => c.onchange = () => { rows[+c.dataset.cp].on = c.checked; label(); });
+  $('cpGo').onclick = () => {
+    const added = rows.filter(r => r.on).map(r => ({ ...r.e, id: newId(), created: Date.now(), date: r.date, satisfaction: 'ー', source: '手入力' }));
+    closePanel();
+    if (!added.length) return;
+    entries.push(...added); persist(); markDirty(); render(); sync();
+    const ids = new Set(added.map(e => e.id));
+    toast(`${added.length}件を追加しました`, { label: '元に戻す', run: () => {
+      entries = entries.filter(e => !ids.has(e.id)); persist(); markDirty(); render(); sync();
+    } });
+  };
 }
 
 function renderList() {
   $('main').innerHTML = `
     <label class="search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg>
-      <input type="search" id="q" placeholder="お店・費目・メモで検索（全期間）" value="${esc(listQuery)}"></label>
+      <input type="search" id="q" placeholder="検索" value="${esc(listQuery)}"></label>
     <div class="hscroll filters" style="margin:0 -16px">${['all', K_VAR, K_FIX, K_SP, K_SAVE, K_INC].map(k => `<button class="pill ${k === listFilter ? 'on' : ''}" data-lf="${k}">${
       k === 'all' ? 'すべて' : `<i class="dot" style="background:${kcolor(k)}"></i>${PILL[k]}`}</button>`).join('')}</div>
     <div id="listBody"></div>`;
@@ -614,18 +815,18 @@ function renderList() {
   $('main').querySelectorAll('[data-lf]').forEach(b => b.onclick = () => {
     listFilter = b.dataset.lf;
     $('main').querySelectorAll('[data-lf]').forEach(x => x.classList.toggle('on', x === b));
-    renderListBody();
+    renderListBody(true);
   });
-  renderListBody();
+  renderListBody(!!$('main').className);
 }
 
-function renderListBody() {
+// animate: day groups rise in one after another (not while typing in the search box)
+function renderListBody(animate) {
   const q = norm(listQuery).toLowerCase();
   let list = q ? entries.filter(e => norm(`${e.himoku} ${e.memo} ${e.method}`).toLowerCase().includes(q)) : monthEntries(monthKey());
   if (listFilter !== 'all') list = list.filter(e => e.kubun === listFilter);
   if (!list.length) {
-    $('listBody').innerHTML = `<div class="empty"><span class="em">${q ? '🔍' : stamps()[0]}</span>${
-      q ? '見つかりませんでした' : 'この月の記録はまだありません<br>下の ＋ から記録しましょう'}</div>`;
+    $('listBody').innerHTML = `<div class="empty"><span class="em">${q ? '🔍' : stamps()[0]}</span>${q ? '該当なし' : '記録なし'}</div>`;
     return;
   }
   const byDay = {};
@@ -633,10 +834,10 @@ function renderListBody() {
   const wd = '日月火水木金土';
   const total = list.reduce((s, e) => s + (isIncome(e) ? 0 : e.amount), 0);
   $('listBody').innerHTML = (q ? `<p class="note">${list.length}件・支出と貯蓄の合計 ${yen(total)}</p>` : '') +
-    Object.entries(byDay).slice(0, q ? 60 : 99).map(([date, items]) => {
+    Object.entries(byDay).slice(0, q ? 60 : 99).map(([date, items], i) => {
       const d = new Date(date + 'T00:00');
       const out = items.reduce((s, e) => s + (isIncome(e) ? 0 : e.amount), 0);
-      return `<div class="day" id="d-${date}"><div class="day-head"><span>${q ? d.getFullYear() + '年' : ''}${d.getMonth() + 1}月${d.getDate()}日（${wd[d.getDay()]}）</span>
+      return `<div class="day${animate ? ' enter' : ''}" style="--i:${Math.min(i, 12) + 2}" id="d-${date}"><div class="day-head"><span>${q ? d.getFullYear() + '年' : ''}${d.getMonth() + 1}月${d.getDate()}日（${wd[d.getDay()]}）</span>
         <span>${out ? '−' + yen(out) : ''}</span></div><div class="card" style="margin:0">` +
         items.map(e => `<button class="item" data-id="${e.id}"><i class="dot" style="background:${kcolor(e.kubun)}"></i>
           <div class="body"><div class="t">${esc(e.himoku)}</div>
@@ -655,7 +856,7 @@ function renderWeek() {
   const wk = weeks[weekSel - 1];
   const items = master.items.filter(i => i.kubun === K_VAR && i.weekly).sort((a, b) => a.order - b.order);
   if (!items.length) {
-    $('main').innerHTML = '<div class="empty"><span class="em">🗓</span>週ごとに管理する費目がありません<br>設定 → 費目・予算 で「週ごとに管理する」をオンにしてください</div>';
+    $('main').innerHTML = '<div class="empty"><span class="em">🗓</span>週予算の費目なし</div>';
     return;
   }
   const varList = monthEntries(mk).filter(e => e.kubun === K_VAR);
@@ -671,18 +872,17 @@ function renderWeek() {
   $('main').innerHTML = `
     <div class="hscroll weeks">${weeks.map(w => `<button class="pill ${w.n === weekSel ? 'on' : ''}" data-w="${w.n}"><b>${w.n}週目</b>${label(w)}</button>`).join('')}</div>
     <section class="card hero" style="margin-top:8px">
-      <div class="ring-wrap">${ring(tb ? ta / tb : 0, rest < 0 ? 'var(--c3-ink)' : 'var(--c3)')}
-        <div class="ring-label"><small>使った</small><b>${tb ? Math.round(ta / tb * 100) : 0}%</b></div></div>
+      <div class="ring-wrap">${ring(tb ? ta / tb : 0, rest < 0 ? 'var(--c3-ink)' : 'var(--c3)', 'week')}
+        <div class="ring-label"><small>使った</small><b ${counted('week-pct', tb ? ta / tb * 100 : 0, 'pct')}>${tb ? Math.round(ta / tb * 100) : 0}%</b></div></div>
       <div class="hero-text"><small>${weekSel}週目のこり（${wk.days.length}日間）</small>
-        <div class="big ${rest < 0 ? 'neg' : ''}">${yen(rest)}</div>
-        <div class="sub">${isNow && rest > 0 ? `1日あたり <b class="num">${yen(rest / left)}</b>・あと${left}日<br>` : ''}週の予算 ${yen(tb)}</div></div>
+        <div class="big ${rest < 0 ? 'neg' : ''}" ${counted('week-rest', rest)}>${yen(rest)}</div>
+        <div class="sub">${isNow && rest > 0 ? `1日あたり <b class="num" ${counted('week-day', rest / left)}>${yen(rest / left)}</b>・あと${left}日<br>` : ''}週の予算 ${yen(tb)}</div></div>
     </section>
     <section class="card">${rows.map((r, i) => barRow(r.name, r.actual, r.budget, K_VAR, i ? '' : 'first')).join('')}</section>
-    <p class="note">週の予算 ＝ 月の予算 × その週の日数 ÷ ${n}日</p>
-    <div class="label">${mo + 1}月の合計（週ごとに管理する費目）</div>
+    <div class="label">${mo + 1}月の合計</div>
     <section class="card">${barRow('合計', mRows.reduce((s, r) => s + r.actual, 0), mRows.reduce((s, r) => s + r.budget, 0), K_VAR, 'total first')}
       ${mRows.map(r => barRow(r.name, r.actual, r.budget, K_VAR)).join('')}</section>`;
-  $('main').querySelectorAll('[data-w]').forEach(b => b.onclick = () => { weekSel = +b.dataset.w; render(); });
+  $('main').querySelectorAll('[data-w]').forEach(b => b.onclick = () => { weekSel = +b.dataset.w; render('enter'); });
   $('main').querySelector('.weeks .on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
 }
 
@@ -695,27 +895,41 @@ function renderYear() {
   const started = months.map(d => d <= now);
   const nStarted = Math.max(started.filter(Boolean).length, 1);
   const data = months.map(d => agg(monthEntries(mkOf(d))));
+  const prevData = months.map(d => agg(monthEntries(mkOf(new Date(d.getFullYear() - 1, d.getMonth(), 1)))));
   const avg = vals => vals.reduce((s, v, i) => s + (started[i] ? v : 0), 0) / nStarted;
-  const cells = vals => vals.map(v => `<td>${v ? num(v) : ''}</td>`).join('') + `<td>${num(avg(vals))}</td>`;
+  const diffMode = yearMode === 'diff';
+  // 金額: the amounts.  前年差: this year − the same month last year (only months that have started);
+  // green when it moved the good way (income / balance up, spending down), rose when the bad way.
+  const signed = v => v > 0 ? '+' + num(v) : v < 0 ? '−' + num(-v) : '±0';
+  const diffCell = (v, upGood) => `<td class="${v === 0 ? '' : (v > 0) === upGood ? 'up' : 'neg'}">${signed(v)}</td>`;
+  const cells = (vals, prev, upGood) => !diffMode
+    ? vals.map(v => `<td>${v ? num(v) : ''}</td>`).join('') + `<td>${num(avg(vals))}</td>`
+    : vals.map((v, i) => started[i] && (v || prev[i]) ? diffCell(v - prev[i], upGood) : '<td></td>').join('') +
+      (avg(vals) || avg(prev) ? diffCell(Math.round(avg(vals) - avg(prev)), upGood) : '<td></td>');
   const head = `<tr><th>項目</th>${months.map(d => `<th>${d.getMonth() + 1}月</th>`).join('')}<th>月平均</th></tr>`;
 
-  const totals = KUBUNS.map(k => data.map(m => m.sum[k] || 0));
-  const outTotal = months.map((_, i) => totals.slice(1).reduce((s, t) => s + t[i], 0));
+  const totalsOf = ds => KUBUNS.map(k => ds.map(m => m.sum[k] || 0));
+  const totals = totalsOf(data), prevTotals = totalsOf(prevData);
+  const outOf = t => months.map((_, i) => t.slice(1).reduce((s, x) => s + x[i], 0));
+  const outTotal = outOf(totals), prevOut = outOf(prevTotals);
   const balance = months.map((_, i) => totals[0][i] - outTotal[i]);
-  let body = `<tr class="total"><td>収支</td>${cells(balance)}</tr>`;
+  const prevBalance = months.map((_, i) => prevTotals[0][i] - prevOut[i]);
+  let body = `<tr class="total"><td>収支</td>${cells(balance, prevBalance, true)}</tr>`;
   for (const [ki, k] of KUBUNS.entries()) {
-    body += `<tr class="grp"><td><span><i class="dot" style="background:${kcolor(k)}"></i>${SHORT[k]}</span></td>${cells(totals[ki])}</tr>`;
+    const upGood = k === K_INC || k === K_SAVE;
+    body += `<tr class="grp"><td><span><i class="dot" style="background:${kcolor(k)}"></i>${SHORT[k]}</span></td>${cells(totals[ki], prevTotals[ki], upGood)}</tr>`;
     for (const h of itemsOf(k)) {
-      const vals = data.map(m => m.by[k]?.[h] || 0);
-      if (vals.some(Boolean)) body += `<tr><td>${esc(h)}</td>${cells(vals)}</tr>`;
+      const vals = data.map(m => m.by[k]?.[h] || 0), prev = prevData.map(m => m.by[k]?.[h] || 0);
+      if (vals.some(Boolean) || (diffMode && prev.some(Boolean))) body += `<tr><td>${esc(h)}</td>${cells(vals, prev, upGood)}</tr>`;
     }
   }
   const max = Math.max(...outTotal, ...totals[0], 1);
+  const sumOf = vals => vals.reduce((s, v) => s + v, 0);
   $('main').innerHTML = `
     <div class="stats">
-      <div><small>収入の合計</small><b>${yen(totals[0].reduce((s, v) => s + v, 0))}</b></div>
-      <div><small>支出・貯蓄</small><b>${yen(outTotal.reduce((s, v) => s + v, 0))}</b></div>
-      <div><small>収支</small><b class="${balance.reduce((s, v) => s + v, 0) < 0 ? 'neg' : ''}">${yen(balance.reduce((s, v) => s + v, 0))}</b></div>
+      <div><small>収入の合計</small><b ${counted('year-in', sumOf(totals[0]))}>${yen(sumOf(totals[0]))}</b></div>
+      <div><small>支出・貯蓄</small><b ${counted('year-out', sumOf(outTotal))}>${yen(sumOf(outTotal))}</b></div>
+      <div><small>収支</small><b class="${sumOf(balance) < 0 ? 'neg' : ''}" ${counted('year-bal', sumOf(balance))}>${yen(sumOf(balance))}</b></div>
     </div>
     <section class="card">
       <div class="card-head"><h3>月ごとの推移</h3></div>
@@ -725,10 +939,22 @@ function renderYear() {
         <span class="${balance[i] < 0 ? 'neg' : ''}">${started[i] ? yen(balance[i]) : ''}</span></div>`).join('')}</div>
     </section>
     <section class="card">
-      <div class="card-head"><h3>費目別</h3><span class="muted">${fy}年4月〜${fy + 1}年3月</span></div>
+      <div class="card-head"><h3>費目別</h3><div class="seg small" id="ymSeg" style="width:150px">
+        <button data-ym="value" class="${diffMode ? '' : 'on'}">金額</button><button data-ym="diff" class="${diffMode ? 'on' : ''}">前年差</button></div></div>
       <div class="tbl-wrap"><table>${head}${body}</table></div>
-    </section>
-    <p class="note">月平均は始まっている${nStarted}か月で割っています。記録のない費目は省いています。</p>`;
+    </section>`;
+  $('ymSeg').onclick = e => {
+    const m = e.target.closest('[data-ym]')?.dataset.ym;
+    if (!m || m === yearMode) return;
+    const x0 = $('main').querySelector('.tbl-wrap').scrollLeft, y0 = window.scrollY;
+    yearMode = m;
+    render();
+    window.scrollTo(0, y0);
+    const wrap = $('main').querySelector('.tbl-wrap');
+    wrap.scrollLeft = x0;
+    if (!reduceMotion.matches) wrap.querySelectorAll('td:not(:first-child)').forEach(td =>
+      td.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 300, easing: 'ease-out' }));
+  };
 }
 
 function renderSettings() {
@@ -744,19 +970,16 @@ function renderSettings() {
   $('main').innerHTML = `
     <div class="label">お金を使わなかった日のスタンプ</div>
     <section class="card">
-      <div class="stamp-preview"><span class="big">${st.join('')}</span>
-        <span class="muted">${st.length > 1 ? '週ごとに順番に変わります' : '毎日このスタンプです'}</span></div>
+      <div class="stamp-preview"><span class="big" id="stampBig">${st.join('')}</span></div>
       <div class="stamp-grid">${STAMP_PRESETS.map(s => {
         const i = st.indexOf(s);
         return `<button data-stamp="${s}" class="${i >= 0 ? 'on' : ''}" aria-label="${s}">${s}${i >= 0 && st.length > 1 ? `<i>${i + 1}</i>` : ''}</button>`;
       }).join('')}</div>
-      <div class="inline-field"><span>自由入力</span><input id="stampInput" value="${esc(prefs.stamp)}" placeholder="好きな絵文字"></div>
+      <div class="inline-field"><span>自由入力</span><input id="stampInput" value="${esc(prefs.stamp)}"></div>
     </section>
-    <p class="note">タップで選ぶ／外す。複数選ぶと1週目・2週目…の順に使います。絵文字キーボードで好きなものも入れられます。</p>
 
     <div class="label">カード明細</div>
-    <section class="card"><button class="row act" id="cardBtn">カード明細CSVを取り込む</button></section>
-    <p class="note">楽天カード（e-NAVI）と三井住友カード（Vpass）のCSVに対応。同じお店の過去の記録から費目を選び、登録済みの明細は除外します。</p>
+    <section class="card"><button class="row act" id="cardBtn">楽天・三井住友のCSVを取り込む</button></section>
 
     <div class="label" style="display:flex;justify-content:space-between">費目・予算<button id="addItem" style="color:var(--accent);font-size:13px">＋ 追加</button></div>
     <section class="card">${groups}</section>
@@ -769,14 +992,14 @@ function renderSettings() {
       ${cfg.url ? '<button class="row act" id="cMaster">シートから費目・予算を読み込み直す</button>' : ''}
     </section>
     <p class="note">最終同期：${last}${isDirty() ? '・未反映の変更あり' : ''}</p>
-    ${cfg.error ? `<p class="note err">前回の同期エラー：${esc(cfg.error)}</p>` : ''}
-    <p class="note">アプリが本体です。01_Raw_Data の B〜I 列はアプリの内容で上書きされます（数式の列には触れません）。シート側で追加された行はアプリに取り込まれます。修正・削除はアプリで行ってください。</p>
+    ${cfg.error ? `<p class="note err">同期エラー：${esc(cfg.error)}</p>` : ''}
 
     <div class="label">バックアップ（CSV）</div>
     <section class="card">
       <button class="row act" id="exportBtn">CSVで書き出す</button>
       <button class="row act" id="importBtn">CSVから読み込む</button>
     </section>
+    <p class="note">最終書き出し：${prefs.lastBackup ? new Date(prefs.lastBackup).toLocaleString('ja-JP') : 'なし'}</p>
     <div class="label">データ</div>
     <section class="card"><button class="row danger" id="wipeBtn">この端末の記録をすべて削除</button></section>
     <p class="note">記録件数：${entries.length}件</p>`;
@@ -785,7 +1008,13 @@ function renderSettings() {
     const s = b.dataset.stamp, cur0 = stamps();
     const next = cur0.includes(s) ? cur0.filter(x => x !== s) : [...cur0, s];
     if (!next.length) { toast('スタンプは1つ以上選んでください'); return; }
+    const y0 = window.scrollY;
     prefs.stamp = next.join(''); write(KEY_PREFS, prefs); render();
+    window.scrollTo(0, y0);
+    if (!reduceMotion.matches) {
+      $('stampBig').animate([{ transform: 'scale(.85)', opacity: .5 }, { transform: 'scale(1.06)' }, { transform: 'none', opacity: 1 }], { duration: 380, easing: 'ease-out' });
+      $('main').querySelector(`[data-stamp="${s}"]`)?.animate([{ transform: 'scale(.8)' }, { transform: 'scale(1.12)' }, { transform: 'none' }], { duration: 380, easing: 'ease-out' });
+    }
   });
   $('stampInput').onchange = e => {
     const g = graphemes(e.target.value);
@@ -860,12 +1089,12 @@ function editItem(it) {
   openPanel(`<h3>${isNew ? '費目を追加' : '費目を編集'}</h3>
     <div class="form-list">
       <div class="inline-field"><span>区分</span><select id="iKubun">${KUBUNS.map(k => `<option value="${k}"${k === cur0.kubun ? ' selected' : ''}>${k}</option>`).join('')}</select></div>
-      <div class="inline-field"><span>費目名</span><input id="iName" value="${esc(cur0.himoku)}" placeholder="例：🍙 食費"></div>
+      <div class="inline-field"><span>費目名</span><input id="iName" value="${esc(cur0.himoku)}"></div>
       <div class="inline-field"><span>月の予算</span><input id="iBudget" inputmode="numeric" placeholder="0" value="${cur0.budget ? num(cur0.budget) : ''}"></div>
       <div class="inline-field"><span>支払方法</span><select id="iMethod">${methodOptions(cur0.methods[0], '（指定なし）')}</select></div>
       <div class="inline-field"><span>表示順</span><input id="iOrder" inputmode="numeric" value="${cur0.order}"></div>
       <div class="inline-field" id="iWeeklyRow"><span>週予算</span><label class="check"><input type="checkbox" id="iWeekly"${cur0.weekly ? ' checked' : ''}>週ごとに管理する</label></div>
-      <div class="inline-field"><span>内容</span><input id="iNote" value="${esc(cur0.note)}" placeholder="入力時のヒントに表示"></div>
+      <div class="inline-field"><span>内容</span><input id="iNote" value="${esc(cur0.note)}"></div>
     </div>
     <div class="actions">${isNew ? '' : '<button type="button" class="del" id="iDel">削除</button>'}
       <button type="button" data-close>閉じる</button><button type="button" class="save" id="iSave">保存</button></div>`);
@@ -992,12 +1221,14 @@ async function exportCsv() {
   const text = '﻿' + rows.map(r => r.map(c => csvCell(c || '')).join(',')).join('\r\n');
   const name = `kakeibo-${ymd(new Date())}.csv`;
   const file = new File([text], name, { type: 'text/csv' });
+  const done = () => { prefs.lastBackup = Date.now(); write(KEY_PREFS, prefs); render(); };
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({ files: [file] }); done(); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(file); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  done();
 }
 
 function parseCsv(text) {
@@ -1161,7 +1392,7 @@ function renderImport() {
   const count = importState.reduce((s, b) => s + b.rows.filter(r => r.on).length, 0);
   const dups = importState.reduce((s, b) => s + b.rows.filter(r => r.dup).length, 0);
   openPanel(`<h3>カード明細の取り込み</h3>
-    <p class="note" style="margin-top:0">登録済みの ${dups}件 は除外しました。費目を確認して取り込んでください。</p>
+    ${dups ? `<p class="note" style="margin-top:0">登録済み ${dups}件を除外</p>` : ''}
     ${importState.map((b, i) => `<div class="label">${esc(b.name)}</div>
       <div class="form-list" style="margin-bottom:8px"><div class="inline-field"><span>支払方法</span><select data-bm="${i}">${methodOptions(b.method, '（選択してください）')}</select></div></div>
       <div class="card" style="box-shadow:none;border:1px solid var(--line)">${b.rows.map((r, j) => `<div class="imp-row${r.dup ? ' dup' : ''}">
@@ -1219,6 +1450,7 @@ function setKubun(k) {
   document.querySelectorAll('#subSeg button').forEach(b => b.classList.toggle('on', b.dataset.kubun === k));
   $('subSeg').style.display = kind === 'expense' ? '' : 'none';
   $('satField').style.display = kind === 'expense' ? '' : 'none';
+  ['kindSeg', 'subSeg', 'satSeg'].forEach(id => segThumb($(id)));
   $('fCats').style.setProperty('--kc', kcolor(k).replace(')', '-ink)'));   // the deeper shade of the 区分 color
   const cats = itemsOf(k);
   if (!cats.includes(f.himoku)) f.himoku = cats[0] || '';
@@ -1235,12 +1467,15 @@ function setHimoku(h, fillMethod) {
 function setSat(s) {
   f.sat = s;
   document.querySelectorAll('#satSeg button').forEach(b => b.classList.toggle('on', b.dataset.sat === s));
+  segThumb($('satSeg'));
 }
 
 // keypad: parts are added together ("1,280 + 300"), handy for splitting receipts
 const amountTotal = () => f.parts.reduce((s, p) => s + (Number(p) || 0), 0);
-function showAmount() {
-  $('amtVal').textContent = num(amountTotal());
+function showAmount(bump) {
+  const v = $('amtVal');
+  v.textContent = num(amountTotal());
+  if (bump) { v.classList.remove('bump'); void v.offsetWidth; v.classList.add('bump'); }
   $('amtExpr').textContent = f.parts.length > 1 ? f.parts.map(p => p ? num(Number(p)) : '').join(' ＋ ') : '';
 }
 $('keypad').onclick = e => {
@@ -1251,7 +1486,7 @@ $('keypad').onclick = e => {
   else if (k === 'clear') f.parts = [''];
   else if (k === 'plus') { if (f.parts[last]) f.parts.push(''); }
   else if (f.parts[last].length < 9 && !(f.parts[last] === '' && k.startsWith('0'))) f.parts[last] += k;
-  showAmount();
+  showAmount(true);
 };
 
 function openForm(entry) {
@@ -1324,14 +1559,14 @@ $('next').onclick = () => moveMonth(1);
 $('monthLabel').onclick = () => {
   if (tab === 'settings') return;
   const now = new Date(); now.setDate(1);
-  if (mkOf(now) !== monthKey()) { cur = now; weekSel = null; render('fade'); }
+  if (mkOf(now) !== monthKey()) { cur = now; weekSel = null; render('enter'); }
 };
-$('gear').onclick = () => { tab = tab === 'settings' ? 'home' : 'settings'; render(); window.scrollTo(0, 0); };
+$('gear').onclick = () => { tab = tab === 'settings' ? 'home' : 'settings'; window.scrollTo(0, 0); render('enter'); };
 document.querySelector('.tabbar').onclick = e => {
   const b = e.target.closest('[data-tab]');
   if (!b) return;
   if (tab === b.dataset.tab) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
-  tab = b.dataset.tab; render(); window.scrollTo(0, 0);
+  tab = b.dataset.tab; window.scrollTo(0, 0); render('enter');
 };
 $('add').onclick = () => openForm(null);
 $('main').addEventListener('click', e => {
@@ -1355,8 +1590,13 @@ window.addEventListener('online', () => sync());
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(); });
 
 persist();
-render();
-sync();
+// The skeleton covers the screen until at least ~0.45s after launch, then fades while the first screen rises in.
+setTimeout(() => {
+  $('skel').classList.add('done');
+  render('enter');
+  setTimeout(() => $('skel').remove(), 500);
+  sync();
+}, Math.max(0, 450 - performance.now()));
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});

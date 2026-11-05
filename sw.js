@@ -1,5 +1,5 @@
-﻿// Bump VERSION whenever any app file changes so phones pick up the update.
-const VERSION = 'kakeibo-v7';
+// Bump VERSION whenever any app file changes so phones pick up the update.
+const VERSION = 'kakeibo-v8';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
