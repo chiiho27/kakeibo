@@ -1192,8 +1192,10 @@ async function sync({ manual = false, force = false } = {}) {
   try {
     const rows = entries.slice().sort(byDate)
       .map(e => [e.date, e.amount, e.kubun, e.himoku, e.method, e.memo, e.satisfaction, e.source]);
-    const data = await post({ action: 'sync', rows });
+    // base: the token the sheet gave us last time; without it (fresh install / wiped storage) the sheet deletes nothing
+    const data = await post({ action: 'sync', rows, base: cfg.base || '' });
     added = data.added || [];
+    if (data.base) cfg.base = data.base;
     added.forEach(r => entries.push({ id: newId(), created: Date.now(), date: r[0], amount: Number(r[1]), kubun: r[2],
       himoku: r[3], method: r[4], memo: r[5], satisfaction: r[6], source: r[7] }));
     cfg.syncedVer = sentVer;
@@ -1274,10 +1276,16 @@ $('importFile').onchange = async ev => {
       method: method || '', memo: memo || '', satisfaction: sat || 'ー', source: source || '手入力' });
   }
   if (!added.length) { toast('読み込める行がありませんでした'); return; }
-  const replace = entries.length && confirm(`${added.length}件を読み込みます。\n\nOK：今のデータを置き換える\nキャンセル：今のデータに追加する`);
+  // adding is the default; replacing needs a second, explicit yes
+  let replace = false;
+  if (entries.length && !confirm(`${added.length}件を今の記録に追加します。`)) {
+    replace = confirm(`今の記録${entries.length}件を消して、${added.length}件に置き換えますか？`);
+    if (!replace) return;
+  }
+  const before = entries;
   entries = replace ? added : entries.concat(added);
   persist(); markDirty(); render(); sync();
-  toast(`${added.length}件を読み込みました`);
+  toast(`${added.length}件を読み込みました`, { label: '元に戻す', run: () => { entries = before; persist(); markDirty(); render(); sync(); } });
 };
 
 // ---- card statement import ----
