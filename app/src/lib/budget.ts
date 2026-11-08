@@ -38,13 +38,13 @@ export function weekStatus(master: Master, rows: SheetRow[], unsent: NewTx[], da
 
 export interface MonthTotals { income: number; expense: number; saving: number; balance: number }
 
-/** 利用日ベースの登録済み明細の収支。積立（先取り貯金・投資）は支出と分けて示す。 */
+/** 月別シートの「記録ベース収支」と同じ：収入 − 支出（特別費を含む）。積立（先取り貯金・投資）は差し引かず別に示す。 */
 export function monthTotals(list: Entry[], ym: string): MonthTotals {
   const inMonth = list.filter(e => e.date.startsWith(ym));
   const income = sum(inMonth.filter(e => e.kubun === K_INC));
   const saving = sum(inMonth.filter(e => e.kubun === K_SAVE));
   const expense = sum(inMonth.filter(e => e.kubun.startsWith('支出')));
-  return { income, expense, saving, balance: income - expense - saving };
+  return { income, expense, saving, balance: income - expense };
 }
 
 /** NMD：今日までの日で、変動費の記録合計が0円。未来日は対象外（null）。 */

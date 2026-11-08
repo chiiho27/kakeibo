@@ -43,8 +43,8 @@ describe('集計', () => {
     expect(s.left).toBeCloseTo(s.budget - 1500);
     expect(s.daysLeft).toBe(5);        // 11/04〜11/08
   });
-  it('今月の収支は積立を支出と分ける', () => {
-    expect(monthTotals(rows, '2026-11')).toEqual({ income: 300000, expense: 10000, saving: 20000, balance: 270000 });
+  it('今月の収支は月別シートの記録ベース収支と同じで、積立を差し引かない', () => {
+    expect(monthTotals(rows, '2026-11')).toEqual({ income: 300000, expense: 10000, saving: 20000, balance: 290000 });
   });
   it('NMD：変動費0円の過去日だけ。固定費だけの日もNMD、未来日は空欄', () => {
     expect(isNoMoneyDay(rows, '2026-11-03', '2026-11-08')).toBe(false);
