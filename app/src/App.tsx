@@ -1,8 +1,9 @@
-import { CircleAlert, CloudOff, FileSpreadsheet, House, List, Settings as Gear } from 'lucide-react';
+import { CircleAlert, CloudOff, FileSpreadsheet, House, List, Plus, Settings as Gear } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { useApp } from './lib/store';
 import type { Op } from './lib/types';
+import { EntryForm } from './ui/EntryForm';
 import { Home } from './ui/Home';
 import { Settings } from './ui/Settings';
 
@@ -13,6 +14,7 @@ export function App() {
   const app = useApp();
   const [tab, setTab] = useState<Tab>('home');
   const [editing, setEditing] = useState<Op | null>(null);
+  const [entryOpen, setEntryOpen] = useState(false);
   // 新しい版は「更新」を押すまで適用しない。更新しても端末の未送信データは消えない。
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW();
 
@@ -46,13 +48,13 @@ export function App() {
       )}
 
       <main>
-        {tab === 'home' && <Home app={app} editing={editing} onDoneEditing={() => setEditing(null)} />}
-        {tab === 'settings' && <Settings app={app} onEdit={op => { setEditing(op); setTab('home'); }} />}
+        {tab === 'home' && <Home app={app} />}
+        {tab === 'settings' && <Settings app={app} onEdit={op => { setEditing(op); setEntryOpen(true); }} />}
         {(tab === 'list' || tab === 'csv') && <p className="muted section">この画面は次の段階で作ります。</p>}
       </main>
 
       {app.notice && (
-        <div className="toast" role="status">
+        <div className={`toast ${entryOpen ? 'top' : ''}`} role="status">
           {app.notice.kind === 'error' && <CircleAlert size={16} aria-hidden="true" />}
           <span>{app.notice.text}</span>
           {app.notice.retry && <button type="button" onClick={() => { app.setNotice(null); app.sync(true); }}>再試行</button>}
@@ -60,12 +62,16 @@ export function App() {
       )}
 
       <nav className="nav" aria-label="画面">
-        {TABS.map(([t, label, I]) => (
+        {TABS.flatMap(([t, label, I], i) => [
+          ...(i === 2 ? [<button key="add" type="button" className="add" aria-label="入力" onClick={() => { setEditing(null); setEntryOpen(true); }}>
+            <span><Plus size={24} strokeWidth={2} aria-hidden="true" /></span></button>] : []),
           <button key={t} type="button" aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)}>
             <I size={24} strokeWidth={2} aria-hidden="true" />{label}
-          </button>
-        ))}
+          </button>,
+        ])}
       </nav>
+
+      <EntryForm app={app} editing={editing} open={entryOpen} onClose={() => { setEntryOpen(false); setEditing(null); }} />
     </div>
   );
 }

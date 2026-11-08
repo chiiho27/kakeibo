@@ -40,15 +40,17 @@ export function useApp() {
   }, [conn.mode]);
 
   const busy = useRef(false);
-  const sync = useCallback(async (manual = false) => {
-    if (!api || busy.current) return;
+  const sync = useCallback(async (manual = false): Promise<Notice | null> => {
+    if (!api) return { text: 'スプレッドシートに未接続です', kind: 'error' };
+    if (busy.current) return null;
     busy.current = true; setSyncing(true);
     try {
       const r = await syncNow(api);
       await reload();
       const msg = syncMessage(r, (await listOps()).length);
       // 自動同期の失敗は上部の状態表示（未送信件数）で知らせ、毎回の通知は出さない
-      if (msg && (manual || r.sent || r.failed)) setNotice(msg);
+      if (msg && (r.sent || r.failed)) setNotice(msg);
+      return msg ?? (manual && r.pulled ? { text: '同期しました', kind: 'info' } : null);
     } finally {
       busy.current = false; setSyncing(false);
     }

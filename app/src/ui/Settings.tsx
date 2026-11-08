@@ -1,4 +1,4 @@
-import { CircleAlert, RefreshCw } from 'lucide-react';
+import { Check, CircleAlert, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { slash } from '../lib/date';
 import { demoApi } from '../lib/demo';
@@ -18,10 +18,21 @@ export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => v
   const [pairing, setPairing] = useState(false);
   const [emoji, setEmoji] = useState(prefs.nmdIcon.startsWith('lucide:') ? '' : prefs.nmdIcon);
   const [, force] = useState(0);
+  const [pressing, setPressing] = useState(false);
+  const [result, setResult] = useState<{ text: string; kind: string; at?: string } | null>(null);
 
   const himoku = snap.master.items.filter(i => i.kubun === '支出（変動費）').map(i => i.himoku);
   const methods = [...new Set([...prefs.quickMethods, prefs.defaultMethod, ...snap.master.methods])];
   const oldest = ops[0] ? Math.floor((Date.now() - ops[0].createdAt) / 864e5) : 0;
+
+  // 一瞬で終わっても「押せた」と分かるよう、回転表示を最低0.6秒見せてから結果を出す
+  async function runSync() {
+    setPressing(true); setResult(null);
+    const [r] = await Promise.all([app.sync(true), new Promise(ok => setTimeout(ok, 600))]);
+    const n = new Date();
+    setResult(r ? { ...r, at: `${n.getHours()}:${String(n.getMinutes()).padStart(2, '0')}` } : { text: 'ほかの同期が終わるのを待っています', kind: 'info' });
+    setPressing(false);
+  }
 
   async function pair() {
     setPairErr('');
@@ -40,9 +51,12 @@ export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => v
         <div className="li"><span>最終同期</span><span className="num">{app.lastSync || 'まだありません'}</span></div>
         <div className="li"><span>未送信</span><span className="num">{ops.length}件</span></div>
         <div className="li">
-          <span className="muted">{app.syncing ? '同期中' : app.online ? '' : 'オフライン'}</span>
-          <button type="button" className="secondary" onClick={() => app.sync(true)} disabled={app.syncing || !app.api}>
-            <RefreshCw size={16} strokeWidth={2} aria-hidden="true" /> 同期を再試行
+          <span className={`syncresult ${result?.kind === 'error' ? 'bad' : result ? 'ok' : ''}`} role="status">
+            {pressing ? '' : result ? <>{result.kind === 'error' ? <CircleAlert size={16} aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}{result.text}{result.at ? `（${result.at}）` : ''}</>
+              : app.online ? '' : 'オフライン'}
+          </span>
+          <button type="button" className="secondary" onClick={runSync} disabled={pressing || app.syncing}>
+            <RefreshCw size={16} strokeWidth={2} aria-hidden="true" className={pressing || app.syncing ? 'spin' : ''} /> {pressing ? '同期中…' : '今すぐ同期'}
           </button>
         </div>
       </div>
