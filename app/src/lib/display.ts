@@ -24,5 +24,5 @@ export function iconFor(himoku: string): LucideIcon {
 export const yen = (n: number) => (n < 0 ? '−' : '') + '¥' + Math.abs(Math.round(n)).toLocaleString('ja-JP');
 
 export const KUBUN_LABEL: Record<string, string> = {
-  '支出（変動費）': '変動費', '支出（固定費）': '固定費', '支出（特別費）': '特別費', '先取り貯金・投資': '貯金・投資', '収入': '収入',
+  '支出（変動費）': '変動費', '支出（固定費）': '固定費', '支出（特別費）': '特別費', '先取り貯金・投資': '貯蓄・投資', '収入': '収入',
 };

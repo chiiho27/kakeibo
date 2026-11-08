@@ -58,6 +58,31 @@ describe('集計', () => {
   });
 });
 
+describe('送信済み取引の修正・削除', () => {
+  const setup = async () => { const api = new DemoApi(); const { rows } = await api.pull(); return { api, row: rows[0] }; };
+  const tx = (r: SheetRow, amount: number) => ({ id: r.id, date: r.date, amount, kubun: r.kubun as Op['tx']['kubun'], himoku: r.himoku, method: r.method, place: r.g, detail: '', sat: '' });
+
+  it('取得時から変わっていなければ修正できる。同じ操作の再送では変わらない', async () => {
+    const { api, row } = await setup();
+    const op = { opId: 'e1', type: 'update' as const, target: { id: row.id, hash: row.hash }, tx: tx(row, 777) };
+    expect((await api.edit(op)).status).toBe('done');
+    expect((await api.edit(op)).repeated).toBe(true);
+    expect(api.rows.find(r => r.id === row.id)!.amount).toBe(777);
+  });
+  it('スプレッドシート側で変更されていたら上書きせず競合を返す', async () => {
+    const { api, row } = await setup();
+    api.rows.find(r => r.id === row.id)!.g = 'シートで直した';
+    const r = await api.edit({ opId: 'e2', type: 'update', target: { id: row.id, hash: row.hash }, tx: tx(row, 777) });
+    expect(r.error).toBe('conflict');
+    expect(api.rows.find(x => x.id === row.id)!.g).toBe('シートで直した');
+  });
+  it('削除は対象の1件だけ', async () => {
+    const { api, row } = await setup(); const before = api.rows.length;
+    await api.edit({ opId: 'e3', type: 'delete', target: { id: row.id, hash: row.hash } });
+    expect(api.rows.length).toBe(before - 1);
+  });
+});
+
 describe('同期', () => {
   let n = 0;
   beforeEach(async () => { await resetDbForTest('t' + n++); });

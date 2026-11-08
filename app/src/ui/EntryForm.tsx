@@ -6,7 +6,7 @@ import { daysInMonth, isValidYmd, parts, slash, today, weekdayMon, ymd } from '.
 import { getMeta, setMeta } from '../lib/db';
 import { displayName, iconFor, KUBUN_LABEL, yen } from '../lib/display';
 import type { AppState } from '../lib/store';
-import { K_INC, K_SAVE, K_VAR, SATISFACTION, type Kubun, type Op } from '../lib/types';
+import { K_INC, K_SAVE, K_VAR, SATISFACTION, type Kubun, type Op, type SheetRow } from '../lib/types';
 import { PickList, Sheet } from './Sheet';
 
 interface Draft {
@@ -45,7 +45,7 @@ function CalendarPicker({ value, onPick }: { value: string; onPick: (d: string) 
   );
 }
 
-export function EntryForm({ app, editing, open, onClose }: { app: AppState; editing: Op | null; open: boolean; onClose: () => void }) {
+export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppState; editing: Op | null; editRow: SheetRow | null; open: boolean; onClose: () => void }) {
   const { snap, prefs } = app;
   const items = snap.master.items;
 
@@ -74,6 +74,11 @@ export function EntryForm({ app, editing, open, onClose }: { app: AppState; edit
   useEffect(() => {
     if (!open) { setLoaded(false); return; }
     setErrors({});
+    if (editRow) {
+      setF({ opId: crypto.randomUUID(), txId: editRow.id, date: editRow.date, expr: String(editRow.amount), kubun: editRow.kubun as Kubun, himoku: editRow.himoku, himokuPicked: true,
+        method: editRow.method, place: editRow.g, sat: (SATISFACTION as readonly string[]).includes(editRow.sat) ? editRow.sat : '' });
+      return;
+    }
     if (editing) {
       const t = editing.tx;
       setF({ opId: editing.opId, txId: t.id, date: t.date, expr: String(t.amount), kubun: t.kubun, himoku: t.himoku, himokuPicked: true,
@@ -84,8 +89,8 @@ export function EntryForm({ app, editing, open, onClose }: { app: AppState; edit
       setF(d && d.expr !== undefined && (d.expr || d.place || d.sat) ? d : fresh());
       setLoaded(true);
     });
-  }, [open, editing]); // eslint-disable-line
-  useEffect(() => { if (open && loaded && !editing) setMeta('draft', f); }, [f, open, loaded, editing]);
+  }, [open, editing, editRow]); // eslint-disable-line
+  useEffect(() => { if (open && loaded && !editing && !editRow) setMeta('draft', f); }, [f, open, loaded, editing, editRow]);
   useEffect(() => { if (!f.himoku && items.length) setF(x => ({ ...x, himoku: defaultHimoku(x.kubun) })); }, [items.length]); // eslint-disable-line
 
   const history = useMemo(() => {
@@ -135,12 +140,27 @@ export function EntryForm({ app, editing, open, onClose }: { app: AppState; edit
     if (Object.keys(errs).length) return;
     setSaving(true);
     try {
+      const tx = { id: f.txId, date: f.date, amount: amount!, kubun: f.kubun, himoku: f.himoku, method: f.method, place: f.place.trim(), detail: '', sat: f.sat };
+      if (editRow) {
+        // 応答が届かず押し直しても、同じ内容なら同じ操作IDになり二重に処理されない
+        const message = await app.applyEdit(`${f.opId}:${JSON.stringify(tx)}`, editRow, tx);
+        if (message) setErrors({ submit: message }); else onClose();
+        return;
+      }
       // 操作IDは入力を始めた時点で決まっている。二重タップでも同じキーで上書きされ、1件のまま。
-      await app.saveOp({ opId: f.opId, type: 'add', state: 'pending', createdAt: editing?.createdAt ?? Date.now(),
-        tx: { id: f.txId, date: f.date, amount: amount!, kubun: f.kubun, himoku: f.himoku, method: f.method, place: f.place.trim(), detail: '', sat: f.sat } });
+      await app.saveOp({ opId: f.opId, type: 'add', state: 'pending', createdAt: editing?.createdAt ?? Date.now(), tx });
       // 端末保存が完了してから入力欄を消す
       if (next === 'continue' && !editing) setF(fresh({ date: f.date, method: f.method }));
       else { if (!editing) await setMeta('draft', null); onClose(); }
+    } finally { setSaving(false); }
+  }
+
+  async function remove() {
+    if (saving || !editRow || !confirm('この取引をスプレッドシートから削除しますか？')) return;
+    setSaving(true);
+    try {
+      const message = await app.applyEdit(`${f.opId}:delete`, editRow, null);
+      if (message) setErrors({ submit: message }); else onClose();
     } finally { setSaving(false); }
   }
 
@@ -158,7 +178,7 @@ export function EntryForm({ app, editing, open, onClose }: { app: AppState; edit
       <Dialog.Portal>
         <Dialog.Overlay className="overlay" />
         <Dialog.Content className="sheet entry" aria-describedby={undefined} onKeyDown={onKey}>
-          <Dialog.Title className="sr">{editing ? '未送信の取引を修正' : '入力'}</Dialog.Title>
+          <Dialog.Title className="sr">{editing ? '未送信の取引を修正' : editRow ? '取引を修正' : '入力'}</Dialog.Title>
           <div className="entry-scroll">
             <div className="tabrow">
               <div className="tabs" role="group" aria-label="種類">
@@ -169,6 +189,7 @@ export function EntryForm({ app, editing, open, onClose }: { app: AppState; edit
               <Dialog.Close className="iconbtn" aria-label="閉じる"><X size={24} strokeWidth={2} /></Dialog.Close>
             </div>
             {editing && <p className="hint">未送信の取引を修正中</p>}
+            {editRow && <p className="hint">送信済みの取引を修正中</p>}
             {kind === K_VAR && (
               <div className="tabs sub" role="group" aria-label="区分">
                 {EXPENSE.map(k => (
@@ -234,6 +255,7 @@ export function EntryForm({ app, editing, open, onClose }: { app: AppState; edit
             )}
           </div>
 
+          {errors.submit && <p className="err submit-err" role="alert"><CircleAlert size={16} aria-hidden="true" />{errors.submit}</p>}
           <div className="keypad" role="group" aria-label="電卓">
             {KEYS.map(k => (
               <button key={k} type="button" className={'+−×÷'.includes(k) ? 'op' : ''} aria-label={k === 'back' ? '1文字消す' : k} onClick={() => key(k)}>
@@ -242,8 +264,9 @@ export function EntryForm({ app, editing, open, onClose }: { app: AppState; edit
             ))}
             <button type="button" className="op" aria-label="全部消す" onClick={() => key('clear')}>C</button>
             <button type="button" className="op" onClick={() => key('=')}>=</button>
-            {editing ? <span /> : <button type="button" className="next" disabled={saving} onClick={() => save('continue')}>続けて</button>}
-            <button type="button" className="go" disabled={saving} onClick={() => save('close')}>{editing ? '保存' : '登録'}</button>
+            {editRow ? <button type="button" className="del" disabled={saving} onClick={remove}>削除</button>
+              : editing ? <span /> : <button type="button" className="next" disabled={saving} onClick={() => save('continue')}>続けて</button>}
+            <button type="button" className="go" disabled={saving} onClick={() => save('close')}>{saving && editRow ? '送信中' : editing || editRow ? '保存' : '登録'}</button>
           </div>
 
           <Sheet open={sheet === 'date'} onOpenChange={o => setSheet(o ? 'date' : null)} title="日付">

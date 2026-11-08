@@ -58,6 +58,23 @@ button { cursor: pointer; }
 .calday.today { text-decoration: underline; text-underline-offset: 4px; font-weight: 700; }
 .calday[aria-pressed=true] { background: var(--primary); color: var(--on-primary); }
 
+/* 明細 */
+.searchbox { display: flex; align-items: center; gap: 8px; min-height: 48px; border: 1px solid var(--line); border-radius: var(--r); padding: 0 16px; margin-top: 8px; color: var(--muted); }
+.searchbox input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--text); font-size: 16px; min-height: 46px; }
+.searchbox:focus-within { border-color: var(--primary); }
+.filters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+.filters button { min-height: 48px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); font-size: 14px; }
+.filters button[aria-pressed=true] { background: var(--light); border: 2px solid var(--primary); font-weight: 700; }
+.dayhead { margin-bottom: 8px; }
+.txrow { width: 100%; border: 0; background: none; text-align: left; }
+.txrow .grow { display: grid; }
+.txname { display: flex; align-items: center; gap: 8px; }
+.txsub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.txamt { display: grid; justify-items: end; white-space: nowrap; font-weight: 600; }
+.iconbtn:disabled { opacity: .4; }
+.keypad .del { background: var(--bg); border: 1px solid var(--error); color: var(--error); font-size: 16px; font-weight: 700; }
+.entry .submit-err { padding-top: 8px; }
+
 /* 入力シート */
 .sheet.entry { display: flex; flex-direction: column; overflow: hidden; max-height: 94vh; max-height: 94dvh; padding-top: 8px; }
 .entry-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 8px; }

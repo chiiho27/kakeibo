@@ -3,7 +3,7 @@ import { ApiError, SheetApi, type Api } from './api';
 import { deleteOp, getMeta, listOps, putOp, setMeta, type Snapshot } from './db';
 import { demoApi, demoMaster } from './demo';
 import { syncNow, type SyncResult } from './sync';
-import { DEFAULT_PREFS, type Connection, type Op, type Prefs } from './types';
+import { DEFAULT_PREFS, type Connection, type NewTx, type Op, type Prefs, type SheetRow } from './types';
 
 const EMPTY: Snapshot = { rows: [], master: { items: [], methods: [] }, fetchedAt: '' };
 
@@ -86,6 +86,26 @@ export function useApp() {
     sync();
   }, [sync]);
 
+  /** 送信済み取引の修正（tx あり）・削除（tx なし）。戻り値は画面に出すエラー文、成功なら空文字。 */
+  const applyEdit = useCallback(async (opId: string, row: SheetRow, tx: NewTx | null): Promise<string> => {
+    if (!api) return 'スプレッドシートに未接続です';
+    try {
+      const r = await api.edit({ opId, type: tx ? 'update' : 'delete', target: { id: row.id, hash: row.hash, row: row.row }, ...(tx ? { tx } : {}) });
+      if (r.status === 'done') {
+        await sync();
+        setNotice({ text: tx ? 'スプレッドシートを更新しました' : 'スプレッドシートから削除しました', kind: 'info' });
+        return '';
+      }
+      if (r.error === 'conflict') { await sync(); return 'スプレッドシート側で変更されています。最新の内容を取得したので、開き直して確認してください'; }
+      return `スプレッドシートが受け付けませんでした（${r.message || r.error}）`;
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : 'network';
+      return code === 'busy' ? 'スプレッドシートが処理中です。少し待ってからもう一度押してください'
+        : code === 'unauthorized' ? '接続が解除されています。設定で接続コードを入力してください'
+        : '通信できませんでした。もう一度押してください';
+    }
+  }, [api, sync]);
+
   const removeOp = useCallback(async (opId: string) => { await deleteOp(opId); setOps(await listOps()); }, []);
 
   const savePrefs = useCallback(async (p: Prefs) => { setPrefs(p); await setMeta('prefs', p); }, []);
@@ -109,6 +129,6 @@ export function useApp() {
   }, [saveConn]);
 
   return { ready, conn, prefs, snap, ops, lastSync, syncing, notice, setNotice, online, api,
-    sync, saveOp, removeOp, savePrefs, saveConn, pair };
+    sync, saveOp, applyEdit, removeOp, savePrefs, saveConn, pair };
 }
 export type AppState = ReturnType<typeof useApp>;

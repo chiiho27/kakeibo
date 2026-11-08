@@ -1,7 +1,7 @@
 /**
  * 家計簿_ver3.0｜アプリAPI（試作）
  *
- * スプレッドシートを正本とし、アプリからは「取引の追加」だけを受け付けます。
+ * スプレッドシートを正本とし、アプリからは「取引の追加・修正・削除」を受け付けます。
  * 既存のカード明細取込（コード.gs）と同じプロジェクトに置き、同じドキュメントロック・同じ書込順を使います。
  *
  * 設置（テスト用コピーで行う）：
@@ -130,8 +130,8 @@ function kkbApiDevices_() {
 function kkbApiPull_(ss) {
   const raw = requireSheetV3_(ss, KKB_API.RAW_SHEET);
   const tz = ss.getSpreadsheetTimeZone();
-  const next = findFirstBlankByColumn_(raw, KKB_API.FIRST_ROW, 2);   // コード.gs と同じ判定
-  const count = next - KKB_API.FIRST_ROW;
+  // 削除で途中に空行ができるので、最初の空行で止めず最終行まで読む
+  const count = Math.max(raw.getLastRow() - KKB_API.FIRST_ROW + 1, 0);
   const values = count > 0 ? raw.getRange(KKB_API.FIRST_ROW, 2, count, 8).getValues() : [];   // B:I
 
   // 台帳：アプリから追加した行の「内容ハッシュ → 取引ID」
@@ -154,7 +154,7 @@ function kkbApiPull_(ss) {
     serverTime: kkbApiNow_(),
     rows: rows,
     master: kkbApiMaster_(ss),
-    capacity: { used: Math.max(count, 0), max: KKB_API.LAST_ROW - KKB_API.FIRST_ROW + 1 },
+    capacity: { used: rows.length, max: KKB_API.LAST_ROW - KKB_API.FIRST_ROW + 1 },
   };
 }
 
@@ -205,6 +205,7 @@ function kkbApiPush_(ss, ops, device) {
     if (!op || !op.opId) { results.push({ opId: null, status: 'error', error: 'bad_op' }); return; }
     // 同じ操作IDは、前回と同じ結果を返す（応答が届かなかった再送でも増えない）
     if (done[op.opId]) { results.push({ opId: op.opId, status: 'done', txId: done[op.opId].txId, row: done[op.opId].row, repeated: true }); return; }
+    if (op.type === 'update' || op.type === 'delete') { results.push(kkbApiEdit_(raw, ledger, tz, op, device)); return; }
     if (op.type !== 'add') { results.push({ opId: op.opId, status: 'error', error: 'unsupported' }); return; }
 
     const tx = op.tx || {};
@@ -233,6 +234,55 @@ function kkbApiPush_(ss, ops, device) {
     results.push({ opId: op.opId, status: 'done', txId: tx.id, row: row });
   });
   return { ok: true, results: results };
+}
+
+// ---------- 送信済み取引の修正・削除 ----------
+
+/**
+ * 取得時の内容ハッシュと今の行が一致するときだけ書き換える。スプレッドシートで変更されていれば conflict を返し、上書きしない。
+ * 削除は B:I と L だけを空にする。行そのものを消すと数式の範囲がずれるため、行は残す（空行は次の追加で再利用される）。
+ */
+function kkbApiEdit_(raw, ledger, tz, op, device) {
+  const target = op.target || {};
+  const row = kkbApiFindRow_(raw, tz, target);
+  if (row < 0) return { opId: op.opId, status: 'error', error: 'conflict' };
+  let hash = '';
+  if (op.type === 'delete') {
+    raw.getRange(row, 2, 1, 8).clearContent();
+    raw.getRange(row, 12).clearContent();
+    SpreadsheetApp.flush();
+  } else {
+    const tx = op.tx || {};
+    const problem = kkbApiValidate_(tx);
+    if (problem) return { opId: op.opId, status: 'error', error: 'invalid', message: problem };
+    const sat = tx.sat && KKB_API.SATISFACTION.indexOf(tx.sat) >= 0 ? tx.sat : 'ー';
+    // 追加と同じ順：区分 → 費目候補の再計算 → 費目。データ元（I列）と登録日時（L列）は変えない。
+    raw.getRange(row, 2, 1, 3).setValues([[Utilities.parseDate(tx.date, tz, 'yyyy-MM-dd'), Number(tx.amount), tx.kubun]]);
+    raw.getRange(row, 6, 1, 3).setValues([[tx.method, kkbApiPlaceDetail_(tx.place, tx.detail), sat]]);
+    SpreadsheetApp.flush();
+    raw.getRange(row, 5).setValue(tx.himoku);
+    SpreadsheetApp.flush();
+    hash = kkbApiRowHash_(kkbApiNormalizeRow_(raw.getRange(row, 2, 1, 8).getValues()[0], tz));
+  }
+  ledger.appendRow([op.opId, target.id || '', op.type, row, hash, new Date(), device.name]);
+  return { opId: op.opId, status: 'done', txId: target.id, row: row };
+}
+
+// 行番号は目安。その行の内容が違えば同じ内容の行を探し、1行に決まらないときは -1
+function kkbApiFindRow_(raw, tz, target) {
+  if (!target.hash) return -1;
+  const count = Math.max(raw.getLastRow() - KKB_API.FIRST_ROW + 1, 0);
+  if (!count) return -1;
+  const values = raw.getRange(KKB_API.FIRST_ROW, 2, count, 8).getValues();
+  const same = i => {
+    const r = values[i] && kkbApiNormalizeRow_(values[i], tz);
+    return !!r && kkbApiRowHash_(r) === target.hash;
+  };
+  const hint = Number(target.row) - KKB_API.FIRST_ROW;
+  if (same(hint)) return KKB_API.FIRST_ROW + hint;
+  const found = [];
+  values.forEach((_, i) => { if (same(i)) found.push(KKB_API.FIRST_ROW + i); });
+  return found.length === 1 ? found[0] : -1;
 }
 
 function kkbApiValidate_(tx) {

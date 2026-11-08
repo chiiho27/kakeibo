@@ -1,4 +1,4 @@
-import type { Master, Op, SheetRow } from './types';
+import type { EditOp, Master, Op, SheetRow } from './types';
 
 export interface PullResult { rows: SheetRow[]; master: Master; serverTime: string; capacity?: { used: number; max: number } }
 export interface PushResult { opId: string; status: 'done' | 'error'; txId?: string; error?: string; message?: string; repeated?: boolean }
@@ -16,6 +16,7 @@ export interface Api {
   pair(code: string, deviceName: string): Promise<string>;
   pull(): Promise<PullResult>;
   push(ops: Op[]): Promise<PushResult[]>;
+  edit(op: EditOp): Promise<PushResult>;
 }
 
 /**
@@ -56,5 +57,9 @@ export class SheetApi implements Api {
   async push(ops: Op[]) {
     const data = await this.call({ action: 'push', ops: ops.map(o => ({ opId: o.opId, type: o.type, tx: o.tx })) });
     return data.results as PushResult[];
+  }
+  async edit(op: EditOp) {
+    const data = await this.call({ action: 'push', ops: [op] });
+    return (data.results as PushResult[])[0];
   }
 }

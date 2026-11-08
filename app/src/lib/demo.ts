@@ -1,6 +1,8 @@
 import { ApiError, type Api, type PullResult, type PushResult } from './api';
 import { daysInMonth, parts, today, ymd } from './date';
-import type { Master, Op, SheetRow } from './types';
+import type { EditOp, Master, Op, SheetRow } from './types';
+
+const hashOf = (r: SheetRow) => JSON.stringify([r.date, r.amount, r.kubun, r.himoku, r.method, r.g, r.sat, r.source]);
 
 // デモモード：Apps Script と同じ約束事（冪等な追加・取得）を端末内で再現する。データはすべて架空。
 // 「通信を切る」「応答を失う」を切り替えて、オフライン・再送の動きを確かめられる。
@@ -57,7 +59,7 @@ export class DemoApi implements Api {
     await this.net();
     const n = new Date(), p = (v: number) => String(v).padStart(2, '0');
     const serverTime = `${n.getFullYear()}/${p(n.getMonth() + 1)}/${p(n.getDate())} ${p(n.getHours())}:${p(n.getMinutes())}`;
-    return { rows: this.rows.map(r => ({ ...r })), master: demoMaster(), serverTime, capacity: { used: this.rows.length, max: 4982 } };
+    return { rows: this.rows.map(r => ({ ...r, hash: hashOf(r) })), master: demoMaster(), serverTime, capacity: { used: this.rows.length, max: 4982 } };
   }
 
   async push(ops: Op[]): Promise<PushResult[]> {
@@ -74,6 +76,22 @@ export class DemoApi implements Api {
     });
     if (this.loseNextResponse) { this.loseNextResponse = false; throw new ApiError('network'); }   // 書込は済んだが応答が届かない
     return results;
+  }
+
+  async edit(op: EditOp): Promise<PushResult> {
+    await this.net();
+    const seen = this.ledger.get(op.opId);
+    if (seen) return { ...seen, repeated: true };
+    const i = this.rows.findIndex(r => r.id === op.target.id && hashOf(r) === op.target.hash);
+    if (i < 0) return { opId: op.opId, status: 'error', error: 'conflict' };
+    if (op.type === 'delete') this.rows.splice(i, 1);
+    else {
+      const t = op.tx!;
+      this.rows[i] = { ...this.rows[i], date: t.date, amount: t.amount, kubun: t.kubun, himoku: t.himoku, method: t.method, g: t.place, sat: t.sat || 'ー' };
+    }
+    const r: PushResult = { opId: op.opId, status: 'done', txId: op.target.id };
+    this.ledger.set(op.opId, r);
+    return r;
   }
 }
 

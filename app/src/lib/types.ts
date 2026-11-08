@@ -19,6 +19,15 @@ export interface SheetRow {
   sat: string;
   source: string;
   row?: number;
+  hash?: string;       // B〜I 列の内容ハッシュ。修正・削除の競合検知に使う
+}
+
+/** 送信済み取引の修正・削除（オンライン時のみ。キューには入れない） */
+export interface EditOp {
+  opId: string;
+  type: 'update' | 'delete';
+  target: { id: string; hash?: string; row?: number };
+  tx?: NewTx;
 }
 
 /** 端末で入力した取引 */

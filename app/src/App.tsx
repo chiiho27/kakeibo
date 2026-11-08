@@ -2,7 +2,8 @@ import { CircleAlert, CloudOff, FileSpreadsheet, House, List, Plus, Settings as 
 import { useEffect, useRef, useState, type TouchEvent } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { useApp } from './lib/store';
-import type { Op } from './lib/types';
+import type { Op, SheetRow } from './lib/types';
+import { List as ListScreen } from './ui/List';
 import { EntryForm } from './ui/EntryForm';
 import { Home } from './ui/Home';
 import { Settings } from './ui/Settings';
@@ -14,6 +15,7 @@ export function App() {
   const app = useApp();
   const [tab, setTab] = useState<Tab>('home');
   const [editing, setEditing] = useState<Op | null>(null);
+  const [editRow, setEditRow] = useState<SheetRow | null>(null);
   const [entryOpen, setEntryOpen] = useState(false);
   const [slide, setSlide] = useState('');
   const swipe = useRef<{ x: number; y: number } | null>(null);
@@ -66,7 +68,8 @@ export function App() {
       <main key={tab} className={slide} onTouchStart={swipeStart} onTouchEnd={swipeEnd}>
         {tab === 'home' && <Home app={app} />}
         {tab === 'settings' && <Settings app={app} onEdit={op => { setEditing(op); setEntryOpen(true); }} />}
-        {(tab === 'list' || tab === 'csv') && <p className="muted section">この画面は次の段階で作ります。</p>}
+        {tab === 'list' && <ListScreen app={app} onEditRow={r => { setEditing(null); setEditRow(r); setEntryOpen(true); }} onEditOp={op => { setEditRow(null); setEditing(op); setEntryOpen(true); }} />}
+        {tab === 'csv' && <p className="muted section">この画面は次の段階で作ります。</p>}
       </main>
 
       {app.notice && (
@@ -79,7 +82,7 @@ export function App() {
 
       <nav className="nav" aria-label="画面">
         {TABS.flatMap(([t, label, I], i) => [
-          ...(i === 2 ? [<button key="add" type="button" className="add" aria-label="入力" onClick={() => { setEditing(null); setEntryOpen(true); }}>
+          ...(i === 2 ? [<button key="add" type="button" className="add" aria-label="入力" onClick={() => { setEditing(null); setEditRow(null); setEntryOpen(true); }}>
             <span><Plus size={24} strokeWidth={2} aria-hidden="true" /></span></button>] : []),
           <button key={t} type="button" aria-current={tab === t ? 'page' : undefined} onClick={() => { setSlide(''); setTab(t); }}>
             <I size={24} strokeWidth={2} aria-hidden="true" />{label}
@@ -87,7 +90,7 @@ export function App() {
         ])}
       </nav>
 
-      <EntryForm app={app} editing={editing} open={entryOpen} onClose={() => { setEntryOpen(false); setEditing(null); }} />
+      <EntryForm app={app} editing={editing} editRow={editRow} open={entryOpen} onClose={() => { setEntryOpen(false); setEditing(null); setEditRow(null); }} />
     </div>
   );
 }
