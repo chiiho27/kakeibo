@@ -16,7 +16,8 @@ interface Draft {
 
 const EXPENSE: Kubun[] = ['支出（変動費）', '支出（固定費）', '支出（特別費）'];
 const KINDS: [string, Kubun][] = [['支出', K_VAR], ['収入', K_INC], ['貯蓄・投資', K_SAVE]];
-const placeOf = (g: string) => g.split('／')[0].trim();
+// G列は1つの「詳細」として扱う。カード明細の店名には「／ｉＤ」のように／を含むものがあるので分割しない。
+const placeOf = (g: string) => g.trim();
 const normPlace = (s: string) => s.normalize('NFKC').trim().toLowerCase();
 const KEYS = ['7', '8', '9', '÷', '4', '5', '6', '×', '1', '2', '3', '−', '0', '00', 'back', '+'];
 
@@ -184,11 +185,11 @@ export function EntryForm({ app, editing, open, onClose }: { app: AppState; edit
 
             <div className="field" role="group" aria-labelledby="l-himoku">
               <span className="label" id="l-himoku">費目</span>
-              <div className="scroll2">
+              <div className="tiles">
                 {himokuList.map(h => {
                   const I = iconFor(h);
-                  return <button key={h} type="button" className="chip" aria-pressed={f.himoku === h} onClick={() => set({ himoku: h, himokuPicked: true })}>
-                    <I size={24} strokeWidth={2} aria-hidden="true" />{displayName(h)}</button>;
+                  return <button key={h} type="button" className="tile" aria-pressed={f.himoku === h} onClick={() => set({ himoku: h, himokuPicked: true })}>
+                    <I size={24} strokeWidth={2} aria-hidden="true" /><span>{displayName(h)}</span></button>;
                 })}
               </div>
               {canGuess && !f.himokuPicked && f.himoku === guess!.himoku && <p className="hint">利用履歴から推測</p>}
@@ -205,7 +206,7 @@ export function EntryForm({ app, editing, open, onClose }: { app: AppState; edit
 
             <div className="line" role="group" aria-labelledby="l-method">
               <span className="label" id="l-method">支払方法</span>
-              <div className="scroll1">
+              <div className="chips">
                 {quickMethods.map(m => <button key={m} type="button" className="chip" aria-pressed={f.method === m} onClick={() => set({ method: m })}>{m}</button>)}
                 <button type="button" className="chip" onClick={() => setSheet('method')}><MoreHorizontal size={24} strokeWidth={2} aria-hidden="true" />その他</button>
               </div>

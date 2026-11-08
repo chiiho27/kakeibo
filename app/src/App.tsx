@@ -1,5 +1,5 @@
 import { CircleAlert, CloudOff, FileSpreadsheet, House, List, Plus, Settings as Gear } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type TouchEvent } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { useApp } from './lib/store';
 import type { Op } from './lib/types';
@@ -15,6 +15,22 @@ export function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [editing, setEditing] = useState<Op | null>(null);
   const [entryOpen, setEntryOpen] = useState(false);
+  const [slide, setSlide] = useState('');
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+
+  // 画面を左右になでるとタブを切り替える。入力欄の上では文字の選択やスクロールを優先する。
+  const swipeStart = (e: TouchEvent) => {
+    const t = e.touches[0];
+    swipe.current = (e.target as HTMLElement).closest('input,select,textarea') ? null : { x: t.clientX, y: t.clientY };
+  };
+  const swipeEnd = (e: TouchEvent) => {
+    if (!swipe.current) return;
+    const t = e.changedTouches[0], dx = t.clientX - swipe.current.x, dy = t.clientY - swipe.current.y;
+    swipe.current = null;
+    if (Math.abs(dx) < 70 || Math.abs(dy) > 45) return;
+    const next = TABS[TABS.findIndex(x => x[0] === tab) + (dx < 0 ? 1 : -1)];
+    if (next) { setSlide(dx < 0 ? 'from-right' : 'from-left'); setTab(next[0]); window.scrollTo(0, 0); }
+  };
   // 新しい版は「更新」を押すまで適用しない。更新しても端末の未送信データは消えない。
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW();
 
@@ -47,7 +63,7 @@ export function App() {
         <p className="err"><CircleAlert size={16} />スプレッドシートに未接続です。設定で接続してください</p>
       )}
 
-      <main>
+      <main key={tab} className={slide} onTouchStart={swipeStart} onTouchEnd={swipeEnd}>
         {tab === 'home' && <Home app={app} />}
         {tab === 'settings' && <Settings app={app} onEdit={op => { setEditing(op); setEntryOpen(true); }} />}
         {(tab === 'list' || tab === 'csv') && <p className="muted section">この画面は次の段階で作ります。</p>}
@@ -65,7 +81,7 @@ export function App() {
         {TABS.flatMap(([t, label, I], i) => [
           ...(i === 2 ? [<button key="add" type="button" className="add" aria-label="入力" onClick={() => { setEditing(null); setEntryOpen(true); }}>
             <span><Plus size={24} strokeWidth={2} aria-hidden="true" /></span></button>] : []),
-          <button key={t} type="button" aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)}>
+          <button key={t} type="button" aria-current={tab === t ? 'page' : undefined} onClick={() => { setSlide(''); setTab(t); }}>
             <I size={24} strokeWidth={2} aria-hidden="true" />{label}
           </button>,
         ])}
