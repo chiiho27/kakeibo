@@ -1,0 +1,1 @@
+{"name":"家計簿","short_name":"家計簿","start_url":"/kakeibo/v3/","display":"standalone","background_color":"#FFFFFF","theme_color":"#FFFFFF","lang":"ja","scope":"/kakeibo/v3/","icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png"},{"src":"icon-512.png","sizes":"512x512","type":"image/png"}]}
