@@ -47,7 +47,8 @@ export function EntryForm({ app, editing, onDoneEditing }: { app: AppState; edit
   const [sheet, setSheet] = useState<'himoku' | 'method' | null>(null);
 
   // 下書きの保持：画面移動・再読み込みでも入れ直さなくてよいように
-  useEffect(() => { getMeta<Draft | null>('draft', null).then(d => { if (d) setF(d); setLoaded(true); }); }, []);
+  // 入力途中のものだけ復元する。空の下書きを戻すと、前日の日付や一時的な支払方法が次回の初期値になってしまう。
+  useEffect(() => { getMeta<Draft | null>('draft', null).then(d => { if (d && (d.digits || d.place || d.detail || d.sat)) setF(d); setLoaded(true); }); }, []);
   useEffect(() => { if (loaded && !editing) setMeta('draft', f); }, [f, loaded, editing]);
   useEffect(() => {
     if (!editing) return;

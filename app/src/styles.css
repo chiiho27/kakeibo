@@ -42,7 +42,7 @@ button { cursor: pointer; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 /* スマートフォン：今週 → 入力 → 今月。PC：左に今週・今月、右に入力 */
 @media (min-width: 720px) {
-  .home { display: grid; grid-template-columns: 1fr 1fr; grid-template-areas: "week entry" "month entry"; column-gap: 24px; align-items: start; }
+  .home { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; grid-template-areas: "week entry" "month entry"; column-gap: 24px; align-items: start; }
   .area-week { grid-area: week; } .area-entry { grid-area: entry; margin-top: 16px; } .area-month { grid-area: month; }
 }
 
@@ -90,7 +90,7 @@ h2.h { font-size: 16px; margin: 32px 0 8px; }
 /* toast */
 .toast { position: fixed; left: 16px; right: 16px; bottom: calc(80px + env(safe-area-inset-bottom)); max-width: 560px; margin: 0 auto;
   background: var(--text); color: #fff; border-radius: var(--r); padding: 8px 16px; min-height: 48px; display: flex; align-items: center; gap: 8px; z-index: 30; }
-.toast button { margin-left: auto; background: none; border: 1px solid #fff; color: #fff; border-radius: var(--r); min-height: 40px; padding: 0 16px; }
+.toast button { margin-left: auto; background: none; border: 1px solid #fff; color: #fff; border-radius: var(--r); min-height: 48px; padding: 0 16px; }
 
 /* bottom sheet (Radix Dialog) */
 .overlay { position: fixed; inset: 0; background: rgba(40, 28, 22, .4); z-index: 40; }
@@ -102,5 +102,5 @@ h2.h { font-size: 16px; margin: 32px 0 8px; }
 
 @media (prefers-reduced-motion: no-preference) {
   .sheet { animation: up .2s ease-out; }
-  @keyframes up { from { transform: translateY(16px); opacity: 0; } }
+  @keyframes up { from { opacity: 0; } }
 }
