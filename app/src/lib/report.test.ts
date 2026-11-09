@@ -31,3 +31,29 @@ describe('月別表示名', () => {
     ]);
   });
 });
+
+import { expenseSlices, nmdStats, weekPace } from './report';
+describe('グラフとペース', () => {
+  const K = '支出（変動費）';
+  const e = (date: string, amount: number, himoku: string) => ({ date, amount, kubun: K, himoku });
+  const master = { items: [], methods: [] };
+  it('月が変わっても同じ項目は同じ色', () => {
+    const list = [e('2026-10-01', 900, 'A'), e('2026-10-02', 500, 'B'), e('2026-11-01', 100, 'B')];
+    expect(expenseSlices(master, list, '2026-11', K)).toEqual([{ name: 'B', amount: 100, color: '#E0883A' }]);
+  });
+  it('8項目目以降はその他にまとめる', () => {
+    const list = Array.from({ length: 9 }, (_, i) => e('2026-11-01', 100 - i, 'X' + i));
+    const s = expenseSlices(master, list, '2026-11', K);
+    expect(s).toHaveLength(8);
+    expect(s[7]).toMatchObject({ name: 'その他', amount: 92 + 93 });
+  });
+  it('週の目安との差', () => {
+    const days = ['d1', 'd2', 'd3', 'd4'];
+    expect(weekPace(400, 300, days, 'd2')).toBe(100);
+    expect(weekPace(400, 100, days, 'd2')).toBe(-100);
+  });
+  it('NMDは記録開始前を数えず、連続は今日からさかのぼる', () => {
+    const list = [e('2026-11-02', 100, 'A'), e('2026-11-05', 100, 'A')];
+    expect(nmdStats(list, '2026-11', '2026-11-07')).toEqual({ month: 4, lastMonth: 0, streak: 2 });
+  });
+});

@@ -30,9 +30,9 @@ function CalendarPicker({ value, onPick }: { value: string; onPick: (d: string) 
   return (
     <div>
       <div className="row" style={{ alignItems: 'center' }}>
-        <button type="button" className="iconbtn" aria-label="前の月" onClick={() => move(-1)}><ChevronLeft size={24} strokeWidth={2} /></button>
+        <button type="button" className="iconbtn" aria-label="前の月" onClick={() => move(-1)}><ChevronLeft size={20} strokeWidth={2} /></button>
         <b className="num">{y}/{String(m).padStart(2, '0')}</b>
-        <button type="button" className="iconbtn" aria-label="次の月" onClick={() => move(1)}><ChevronRight size={24} strokeWidth={2} /></button>
+        <button type="button" className="iconbtn" aria-label="次の月" onClick={() => move(1)}><ChevronRight size={20} strokeWidth={2} /></button>
       </div>
       <div className="calgrid" style={{ marginTop: 8 }}>
         {'月火水木金土日'.split('').map(w => <span key={w} className="muted wd">{w}</span>)}
@@ -187,7 +187,7 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
                   <button key={label} type="button" aria-pressed={kind === k} onClick={() => set({ kubun: k, himoku: defaultHimoku(k), himokuPicked: false })}>{label}</button>
                 ))}
               </div>
-              <Dialog.Close className="iconbtn" aria-label="閉じる"><X size={24} strokeWidth={2} /></Dialog.Close>
+              <Dialog.Close className="iconbtn" aria-label="閉じる"><X size={20} strokeWidth={2} /></Dialog.Close>
             </div>
             {editing && <p className="hint">未送信の取引を修正中</p>}
             {editRow && <p className="hint">送信済みの取引を修正中</p>}
@@ -211,7 +211,7 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
                 {himokuList.map(h => {
                   const I = iconFor(h);
                   return <button key={h} type="button" className="tile" aria-pressed={f.himoku === h} onClick={() => set({ himoku: h, himokuPicked: true })}>
-                    <I size={24} strokeWidth={2} aria-hidden="true" /><span>{displayName(h)}</span></button>;
+                    <I size={20} strokeWidth={2} aria-hidden="true" /><span>{displayName(h)}</span></button>;
                 })}
               </div>
               {canGuess && !f.himokuPicked && f.himoku === guess!.himoku && <p className="hint">利用履歴から推測</p>}
@@ -221,7 +221,7 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
             <div className="line">
               <span className="label">日付</span>
               <button type="button" className="input datebtn num" onClick={() => setSheet('date')} aria-label={`日付 ${slash(f.date)}。カレンダーを開く`}>
-                {slash(f.date)}<CalendarDays size={24} strokeWidth={2} aria-hidden="true" />
+                {slash(f.date)}<CalendarDays size={20} strokeWidth={2} aria-hidden="true" />
               </button>
             </div>
             {errors.date && <p className="err"><CircleAlert size={16} />{errors.date}</p>}
@@ -230,7 +230,7 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
               <span className="label" id="l-method">支払方法</span>
               <div className="chips">
                 {quickMethods.map(m => <button key={m} type="button" className="chip" aria-pressed={f.method === m} onClick={() => set({ method: m })}>{m}</button>)}
-                <button type="button" className="chip" onClick={() => setSheet('method')}><MoreHorizontal size={24} strokeWidth={2} aria-hidden="true" />その他</button>
+                <button type="button" className="chip" onClick={() => setSheet('method')}><MoreHorizontal size={20} strokeWidth={2} aria-hidden="true" />その他</button>
               </div>
             </div>
             {errors.method && <p className="err"><CircleAlert size={16} />{errors.method}</p>}
@@ -260,7 +260,7 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
           <div className="keypad" role="group" aria-label="電卓">
             {KEYS.map(k => (
               <button key={k} type="button" className={'+−×÷'.includes(k) ? 'op' : ''} aria-label={k === 'back' ? '1文字消す' : k} onClick={() => key(k)}>
-                {k === 'back' ? <Delete size={24} strokeWidth={2} aria-hidden="true" /> : k}
+                {k === 'back' ? <Delete size={20} strokeWidth={2} aria-hidden="true" /> : k}
               </button>
             ))}
             <button type="button" className="op" aria-label="全部消す" onClick={() => key('clear')}>C</button>

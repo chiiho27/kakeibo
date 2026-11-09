@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { Search, X } from 'lucide-react';
+import { LoaderCircle, Search, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 /** ボトムシート（PC では中央のダイアログ）。フォーカス管理・Esc・読み上げは Radix に任せる。 */
@@ -11,7 +11,7 @@ export function Sheet({ open, onOpenChange, title, children }: { open: boolean; 
         <Dialog.Content className="sheet" aria-describedby={undefined}>
           <div className="row" style={{ alignItems: 'center' }}>
             <Dialog.Title asChild><h3>{title}</h3></Dialog.Title>
-            <Dialog.Close className="iconbtn" aria-label="閉じる"><X size={24} strokeWidth={2} /></Dialog.Close>
+            <Dialog.Close className="iconbtn" aria-label="閉じる"><X size={20} strokeWidth={2} /></Dialog.Close>
           </div>
           {children}
         </Dialog.Content>
@@ -32,7 +32,7 @@ export function PickList({ items, selected, onPick, render }: {
         <label className="datebox" style={{ marginBottom: 16 }}>
           <span className="sr">検索</span>
           <input className="input" value={q} onChange={e => setQ(e.target.value)} placeholder="検索" />
-          <span className="iconbtn" aria-hidden="true"><Search size={24} strokeWidth={2} /></span>
+          <span className="iconbtn" aria-hidden="true"><Search size={20} strokeWidth={2} /></span>
         </label>
       )}
       <div className="list" role="listbox" aria-label="候補">
@@ -44,5 +44,18 @@ export function PickList({ items, selected, onPick, render }: {
         {!shown.length && <p className="li muted">該当なし</p>}
       </div>
     </>
+  );
+}
+
+/** 保存中などに画面中央へ出す表示。終わるまで他の操作はできない。 */
+export function BusyVeil({ text, sub }: { text: string; sub?: string }) {
+  return (
+    <div className="busyveil" role="status">
+      <div className="busybox">
+        <LoaderCircle size={40} strokeWidth={2} className="spin" aria-hidden="true" />
+        <b>{text}</b>
+        {sub && <small>{sub}</small>}
+      </div>
+    </div>
   );
 }

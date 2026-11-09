@@ -48,12 +48,12 @@ export function List({ app, onEditRow, onEditOp }: { app: AppState; onEditRow: (
   return (
     <div>
       <div className="row" style={{ alignItems: 'center' }}>
-        <button type="button" className="iconbtn" aria-label="前の月" disabled={!!needle} onClick={() => move(-1)}><ChevronLeft size={24} strokeWidth={2} /></button>
+        <button type="button" className="iconbtn" aria-label="前の月" disabled={!!needle} onClick={() => move(-1)}><ChevronLeft size={20} strokeWidth={2} /></button>
         <b className="num">{needle ? '全期間' : `${ym[0]}/${String(ym[1]).padStart(2, '0')}`}</b>
-        <button type="button" className="iconbtn" aria-label="次の月" disabled={!!needle} onClick={() => move(1)}><ChevronRight size={24} strokeWidth={2} /></button>
+        <button type="button" className="iconbtn" aria-label="次の月" disabled={!!needle} onClick={() => move(1)}><ChevronRight size={20} strokeWidth={2} /></button>
       </div>
       <label className="searchbox">
-        <Search size={24} strokeWidth={2} aria-hidden="true" />
+        <Search size={20} strokeWidth={2} aria-hidden="true" />
         <span className="sr">検索</span>
         <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="検索" autoComplete="off" />
       </label>
@@ -73,7 +73,7 @@ export function List({ app, onEditRow, onEditOp }: { app: AppState; onEditRow: (
               const I = iconFor(i.himoku);
               return (
                 <button key={i.key} type="button" className="li pick txrow" onClick={() => open(i)}>
-                  <I size={24} strokeWidth={2} aria-hidden="true" />
+                  <I size={20} strokeWidth={2} aria-hidden="true" />
                   <span className="grow">
                     <span className="txname">{displayName(i.himoku)}{i.op && <span className="tag">{STATE[i.op.state]}</span>}</span>
                     <span className="muted txsub">{[KUBUN_LABEL[i.kubun] ?? i.kubun, i.method, i.g].filter(Boolean).join('・')}</span>

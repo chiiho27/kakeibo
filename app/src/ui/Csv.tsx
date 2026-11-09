@@ -1,3 +1,4 @@
+import { BusyVeil } from './Sheet';
 import { CircleAlert, FileUp } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, type CsvApplyItem, type CsvItem } from '../lib/api';
@@ -124,10 +125,10 @@ export function Csv({ app }: { app: AppState }) {
       <input ref={input} type="file" accept=".csv,text/csv" multiple hidden onChange={e => { pick(e.target.files); e.target.value = ''; }} />
       <button type="button" className="primary" style={{ marginTop: 8 }} disabled={!!busy}
         onClick={() => app.conn.mode === 'demo' ? read([]) : input.current?.click()}>
-        <FileUp size={24} strokeWidth={2} aria-hidden="true" /> {app.conn.mode === 'demo' ? 'サンプルの明細を読み込む' : 'CSVファイルを選ぶ'}
+        <FileUp size={20} strokeWidth={2} aria-hidden="true" /> {app.conn.mode === 'demo' ? 'サンプルの明細を読み込む' : 'CSVファイルを選ぶ'}
       </button>
       <div role="status">
-        {busy && <p className="muted">{busy}</p>}
+        {busy && <BusyVeil text={busy} sub="画面を閉じずにお待ちください" />}
         {summary && !busy && <p className="syncresult ok">{summary}</p>}
       </div>
       {error && <p className="err" role="alert"><CircleAlert size={16} aria-hidden="true" />{error}</p>}

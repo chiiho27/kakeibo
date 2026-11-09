@@ -4,7 +4,7 @@ import { ApiError, type SettingsData, type SettingsItem, type SettingsOp } from 
 import { displayName, KUBUN_LABEL, yen } from '../lib/display';
 import type { AppState } from '../lib/store';
 import { KUBUN } from '../lib/types';
-import { Sheet } from './Sheet';
+import { BusyVeil, Sheet } from './Sheet';
 
 const VAR = '支出（変動費）';
 type Draft = { order: string; budget: string; weekly: boolean; hidden: boolean };
@@ -72,14 +72,14 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
 
   return (
     <Sheet open={open} onOpenChange={o => { if (!o && !busy) { close(); onClose(); } }} title={edit ? displayName(edit.himoku) : '費目・予算・支払方法'}>
+      {phase && <BusyVeil text={phase} sub="1分ほどかかることがあります" />}
       <div className="masterstatus">
         <div role="status">
-          {phase && <p className="savingbar"><LoaderCircle size={24} strokeWidth={2} className="spin" aria-hidden="true" /><span>{phase}<small>1分ほどかかることがあります</small></span></p>}
           {!phase && done && <p className="syncresult ok">{done}</p>}
         </div>
         {!phase && error && <p className="err" role="alert"><CircleAlert size={16} aria-hidden="true" />{error}</p>}
       </div>
-      {!data && !error && <p className="savingbar"><LoaderCircle size={24} strokeWidth={2} className="spin" aria-hidden="true" /><span>取得しています</span></p>}
+      {!data && !error && <BusyVeil text="取得しています" />}
 
       {edit && draft ? (
         <div className="masterform">
@@ -89,7 +89,7 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
           {edit.kubun === VAR && <label className="check"><input type="checkbox" checked={draft.weekly} onChange={e => setDraft({ ...draft, weekly: e.target.checked })} />週管理の対象にする</label>}
           {edit.kubun === VAR && draft.weekly !== edit.weekly && <p className="hint">過去の週の予算表示も変わります。</p>}
           <label className="check"><input type="checkbox" checked={draft.hidden} onChange={e => setDraft({ ...draft, hidden: e.target.checked })} />入力の候補から隠す（過去の明細と集計は残ります）</label>
-          <button type="button" className="primary" disabled={busy || !ops.length || !Number.isFinite(Number(draft.budget)) || !Number.isFinite(Number(draft.order))} onClick={() => run(ops, close)}>{busy && <LoaderCircle size={24} strokeWidth={2} className="spin" aria-hidden="true" />}{busy ? '保存中' : '保存する'}</button>
+          <button type="button" className="primary" disabled={busy || !ops.length || !Number.isFinite(Number(draft.budget)) || !Number.isFinite(Number(draft.order))} onClick={() => run(ops, close)}>{busy && <LoaderCircle size={20} strokeWidth={2} className="spin" aria-hidden="true" />}{busy ? '保存中' : '保存する'}</button>
           <button type="button" className="secondary" style={{ width: '100%', marginTop: 8 }} disabled={busy} onClick={close}>戻る</button>
         </div>
       ) : data && (

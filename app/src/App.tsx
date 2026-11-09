@@ -91,7 +91,7 @@ export function App() {
           ...(i === 2 ? [<button key="add" type="button" className="add" aria-label="入力" onClick={() => { setEditing(null); setEditRow(null); setEntryOpen(true); }}>
             <span><Plus size={24} strokeWidth={2} aria-hidden="true" /></span></button>] : []),
           <button key={t} type="button" aria-current={tab === t ? 'page' : undefined} onClick={() => { setSlide(''); setTab(t); }}>
-            <I size={24} strokeWidth={2} aria-hidden="true" />{label}
+            <I size={22} strokeWidth={2} aria-hidden="true" />{label}
           </button>,
         ])}
       </nav>

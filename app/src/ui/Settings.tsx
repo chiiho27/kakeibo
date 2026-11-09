@@ -6,6 +6,7 @@ import { displayName, iconFor, KUBUN_LABEL, yen } from '../lib/display';
 import type { AppState } from '../lib/store';
 import { KUBUN, type Op } from '../lib/types';
 import { NmdMark } from './Home';
+import { BusyVeil } from './Sheet';
 import { MasterEdit } from './MasterEdit';
 
 const NMD_ICONS = ['lucide:sprout', 'lucide:leaf', 'lucide:star', 'lucide:smile', 'lucide:circle-check', 'lucide:heart'];
@@ -57,6 +58,7 @@ export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => v
             {pressing ? '' : result ? <>{result.kind === 'error' ? <CircleAlert size={16} aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}{result.text}{result.at ? `（${result.at}）` : ''}</>
               : app.online ? '' : 'オフライン'}
           </span>
+          {pressing && <BusyVeil text="同期しています" />}
           <button type="button" className="secondary" onClick={runSync} disabled={pressing || app.syncing}>
             <RefreshCw size={16} strokeWidth={2} aria-hidden="true" className={pressing || app.syncing ? 'spin' : ''} /> {pressing ? '同期中…' : '今すぐ同期'}
           </button>
@@ -153,7 +155,7 @@ export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => v
             const I = iconFor(i.himoku);
             return (
               <div className="li" key={k + i.himoku}>
-                <I size={24} strokeWidth={2} aria-hidden="true" />
+                <I size={20} strokeWidth={2} aria-hidden="true" />
                 <span className="grow">{displayName(i.himoku)} <span className="muted">{KUBUN_LABEL[k]}</span></span>
                 {i.weekly && <span className="tag">週</span>}
                 <span className="num muted">{i.budget ? yen(i.budget) : ''}</span>

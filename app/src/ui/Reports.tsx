@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { monthTotals } from '../lib/budget';
 import { today } from '../lib/date';
 import { displayName, yen } from '../lib/display';
-import { fiscalYearOf, monthGroups, yearReport } from '../lib/report';
+import { expenseSlices, fiscalYearOf, monthGroups, yearReport } from '../lib/report';
 import type { AppState } from '../lib/store';
+import { Donut, YearBars } from './Charts';
 import { Sheet } from './Sheet';
 
 export type ReportTab = 'month' | 'year' | 'special';
@@ -18,9 +19,9 @@ const Line = ({ label, value }: { label: string; value: string }) => <div classN
 function Stepper({ label, prev, next }: { label: string; prev?: () => void; next?: () => void }) {
   return (
     <div className="row stepper">
-      <button type="button" className="iconbtn" aria-label="前へ" disabled={!prev} onClick={prev}><ChevronLeft size={24} strokeWidth={2} /></button>
+      <button type="button" className="iconbtn" aria-label="前へ" disabled={!prev} onClick={prev}><ChevronLeft size={20} strokeWidth={2} /></button>
       <b className="num" aria-live="polite">{label}</b>
-      <button type="button" className="iconbtn" aria-label="次へ" disabled={!next} onClick={next}><ChevronRight size={24} strokeWidth={2} /></button>
+      <button type="button" className="iconbtn" aria-label="次へ" disabled={!next} onClick={next}><ChevronRight size={20} strokeWidth={2} /></button>
     </div>
   );
 }
@@ -39,6 +40,7 @@ function Month({ app }: { app: AppState }) {
         <div className={`big num ${t.balance < 0 ? 'over' : ''}`}>{yen(t.balance)}</div>
         <Line label="収入" value={yen(t.income)} /><Line label="支出" value={yen(t.expense)} /><Line label="先取り貯金・投資" value={yen(t.saving)} />
       </div>
+      <section className="section card"><h2>変動費の内訳</h2><Donut slices={expenseSlices(app.snap.master, app.snap.rows, ym, '支出（変動費）')} title="この月の変動費" /></section>
       {GROUPS.map(([k, label]) => {
         const lines = monthGroups(app.snap.master, app.snap.rows, ym, k);
         // 固定費の予算は月ごとの記録がないので、過去の月には出さない
@@ -52,6 +54,7 @@ function Month({ app }: { app: AppState }) {
                 <div key={l.group} className="li reportitem">
                   <span className="grow">{displayName(l.group)}</span>
                   <span className="num">{yen(l.actual)}{hasBudget && budgetOf(l) > 0 && <small className="muted"> / {yen(budgetOf(l))}</small>}</span>
+                  {hasBudget && budgetOf(l) > 0 && <div className="budgetbar"><i className={l.actual > budgetOf(l) ? 'over' : ''} style={{ width: `${Math.min((l.actual / budgetOf(l)) * 100, 100)}%` }} /></div>}
                 </div>
               ))}
             </div>
@@ -75,6 +78,7 @@ function Year({ app }: { app: AppState }) {
         <div className={`big num ${r.total.balance < 0 ? 'over' : ''}`}>{yen(r.total.balance)}</div>
         <Line label="収入" value={yen(r.total.income)} /><Line label="支出" value={yen(r.total.expense)} /><Line label="先取り貯金・投資" value={yen(r.total.saving)} />
       </div>
+      <section className="section card"><h2>月ごとの収入と支出</h2><YearBars months={r.months} /></section>
       <table className="yeartable num">
         <thead><tr><th scope="col">月</th><th scope="col">収入</th><th scope="col">支出</th><th scope="col">収支</th></tr></thead>
         <tbody>
