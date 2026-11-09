@@ -49,9 +49,9 @@ export interface Api {
 export class SheetApi implements Api {
   constructor(private url: string, private device: string, private timeoutMs = 45000) {}
 
-  private async call(body: Record<string, unknown>) {
+  private async call(body: Record<string, unknown>, timeoutMs = this.timeoutMs) {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
     let res: Response;
     try {
       res = await fetch(this.url, { method: 'POST', body: JSON.stringify({ v: 1, device: this.device, ...body }), signal: ctl.signal });
@@ -78,7 +78,7 @@ export class SheetApi implements Api {
     return (await this.call({ action: 'settingsRead' })) as unknown as SettingsData;
   }
   async settingsApply(op: SettingsOp) {
-    return (await this.call({ action: 'settingsApply', op })) as unknown as SettingsResult;
+    return (await this.call({ action: 'settingsApply', op }, 150000)) as unknown as SettingsResult;
   }
   async pull() {
     return (await this.call({ action: 'pull' })) as unknown as PullResult;

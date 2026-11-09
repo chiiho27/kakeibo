@@ -213,3 +213,12 @@ h2.h { font-size: 16px; margin: 32px 0 8px; }
 .masterform label { display: grid; gap: 4px; font-size: 14px; }
 .masterform label.check, label.check { display: flex; align-items: center; gap: 8px; min-height: 48px; }
 label.check input { width: 24px; height: 24px; accent-color: var(--primary); }
+
+.masterstatus { position: sticky; top: -8px; z-index: 2; background: var(--bg); }
+.masterstatus p { margin: 0 0 8px; padding: 8px 0; }
+.savingbar { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
+.savingbar small { display: block; font-weight: 400; }
+.groupname { display: block; font-size: 12px; }
+.secondary.danger { display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: var(--error); }
+.dangerbtn { color: var(--muted, inherit); }
+.dangerbtn.on { color: var(--error); }

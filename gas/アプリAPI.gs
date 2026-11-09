@@ -655,9 +655,11 @@ function kkbApiSettingsApply_(ss, op) {
   const sh = requireSheetV3_(ss, '費目管理');
   if (op.type === 'addMethod') return kkbApiAddMethod_(sh, String(op.name || '').trim());
   if (op.type === 'hide') return kkbApiSetHidden_(op);
+  if (op.type === 'deleteMethod') return kkbApiDeleteMethod_(ss, sh, String(op.name || '').trim());
   const b = KKB_BLOCKS[op.kubun];
   if (!b) return { status: 'error', message: '区分が正しくありません' };
   if (op.type === 'add') return kkbApiAddItem_(ss, sh, op, b);
+  if (op.type === 'deleteItem') return kkbApiDeleteItem_(ss, sh, op, b);
   const row = Number(op.row);
   if (!(row >= b.first && row <= b.last) || String(sh.getRange(row, b.col).getValue()).trim() !== op.himoku)
     return { status: 'conflict', message: '費目の位置が変わっています。読み直したので、確認してもう一度保存してください' };
@@ -714,7 +716,12 @@ function kkbApiAddItem_(ss, sh, op, b) {
 function kkbApiSetGroup_(ss, sh, op, b, row) {
   const col = b.col + KKB_OFFSET.group;
   const r = kkbApiSetCell_(sh, row, col, op.from, String(op.to || '').trim());
-  if (r.status !== 'done' || r.repeated || op.kubun !== KKB_VAR) return r;
+  if (r.status !== 'done' || r.repeated) return r;
+  // 同じ費目名の行（口座違い）は集計先が分かれないよう、同じ表示名にそろえる
+  sh.getRange(b.first, b.col, b.last - b.first + 1, KKB_OFFSET.group + 1).getValues().forEach((x, i) => {
+    if (String(x[0]).trim() === op.himoku && String(x[KKB_OFFSET.group]).trim() === op.from) sh.getRange(b.first + i, col).setValue(String(op.to).trim());
+  });
+  if (op.kubun !== KKB_VAR) return r;
   // 同じ表示名の行が残っていなければ、固定済みの月の見出しも新しい名前に合わせる
   const still = sh.getRange(b.first, col, b.last - b.first + 1, 1).getValues().some(x => String(x[0]).trim() === op.from);
   if (still) return r;
@@ -760,7 +767,8 @@ function kkbApiUnfreeze_(sheet) {
 // 過去の月を固定してから予算を変え、過去の月の数字が1つでも動いたら全部元に戻す。
 function kkbApiKeepPast_(ss, change) {
   const past = kkbApiPastSheets_(ss);
-  const numbers = s => JSON.stringify(s.getDataRange().getValues().map(r => r.map(x => (typeof x === 'number' ? x : null))));
+  // 費目の追加・削除で金額0の行が増減したり行が詰まったりしても、金額が変わらなければ「動いた」としない
+  const numbers = s => JSON.stringify([].concat.apply([], s.getDataRange().getValues()).filter(x => typeof x === 'number' && x !== 0).sort((a, b) => a - b));
   const before = past.map(p => numbers(p.sheet));
   const fm = ss.getSheetByName('費目管理');
   const original = fm.getDataRange().getValues();
@@ -771,10 +779,10 @@ function kkbApiKeepPast_(ss, change) {
   SpreadsheetApp.flush();
   const moved = past.filter((p, i) => numbers(p.sheet) !== before[i]);
   if (!moved.length) return r;
-  fm.getDataRange().getFormulas().forEach((line, y) => line.forEach((f, x) => {
-    if (f || y >= original.length) return;
-    const cell = fm.getRange(y + 1, x + 1);
-    if (!kkbApiSameCell_(cell.getValue(), original[y][x])) cell.setValue(original[y][x]);
+  const range = fm.getDataRange(), nowValues = range.getValues(), nowFormulas = range.getFormulas();
+  nowValues.forEach((line, y) => line.forEach((v, x) => {
+    if (nowFormulas[y][x] || y >= original.length || x >= original[y].length) return;
+    if (!kkbApiSameCell_(v, original[y][x])) fm.getRange(y + 1, x + 1).setValue(original[y][x]);
   }));
   fresh.forEach(p => kkbApiUnfreeze_(p.sheet));
   return { status: 'error', message: moved.map(p => p.sheet.getName()).join('・') + 'の数字が変わるため、変更を取り消しました' };
@@ -795,4 +803,47 @@ function kkbApiUnfreezeAll() {
   if (ui.alert('月シートの予算の固定を解除しますか？', '過去の月の予算が、費目管理の現在の金額に戻ります。新しい年度に月シートを使い回すときに実行します。', ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
   SpreadsheetApp.getActive().getSheets().forEach(kkbApiUnfreeze_);
   ui.alert('解除しました');
+}
+
+// ---- 費目・支払方法の削除 ----
+// 明細で使っているものは消さない（過去の集計が外れるため）。
+function kkbApiRawUse_(ss) {
+  const raw = requireSheetV3_(ss, KKB_API.RAW_SHEET);
+  const n = Math.max(Math.min(raw.getLastRow(), KKB_API.LAST_ROW) - KKB_API.FIRST_ROW + 1, 0);
+  return n ? raw.getRange(KKB_API.FIRST_ROW, 4, n, 3).getValues().map(r => ({ kubun: String(r[0]).trim(), himoku: String(r[1]).trim(), method: String(r[2]).trim() })) : [];
+}
+
+function kkbApiDeleteItem_(ss, sh, op, b) {
+  const row = Number(op.row);
+  if (!(row >= b.first && row <= b.last)) return { status: 'error', message: '区分が正しくありません' };
+  const name = String(sh.getRange(row, b.col).getValue()).trim();
+  if (!name) return { status: 'done', repeated: true };
+  if (name !== op.himoku) return { status: 'conflict', message: '費目の位置が変わっています。読み直したので、確認してもう一度押してください' };
+  if (kkbApiRawUse_(ss).some(r => r.kubun === op.kubun && r.himoku === name)) return { status: 'error', message: '明細で使われているため削除できません。使わない場合は「入力の候補から隠す」にしてください' };
+  const range = sh.getRange(row, b.col, 1, KKB_OFFSET.budget + 1);
+  if (range.getFormulas()[0].some(Boolean)) return { status: 'error', message: 'この行には数式があるため削除できません' };
+  const clear = () => {
+    range.clearContent();
+    if (op.kubun === KKB_VAR) sh.getRange(row, KKB_WEEK_COL).setValue(false);
+    return { status: 'done' };
+  };
+  const r = op.kubun === KKB_VAR ? kkbApiKeepPast_(ss, clear) : clear();
+  const still = sh.getRange(b.first, b.col, b.last - b.first + 1, 1).getValues().some(x => String(x[0]).trim() === name);
+  if (r.status === 'done' && !still) kkbApiSetHidden_({ target: 'item', key: op.kubun + '|' + name, to: false });
+  return r;
+}
+
+function kkbApiDeleteMethod_(ss, sh, name) {
+  const v = sh.getRange(KKB_METHOD.first, KKB_METHOD.col, KKB_METHOD.last - KKB_METHOD.first + 1, 1).getValues().map(x => String(x[0] || '').trim());
+  const i = v.indexOf(name);
+  if (!name || i < 0) return { status: 'done', repeated: true };
+  if (kkbApiRawUse_(ss).some(r => r.method === name)) return { status: 'error', message: '明細で使われているため削除できません。使わない場合は「隠す」にしてください' };
+  const used = Object.keys(KKB_BLOCKS).some(k => {
+    const b = KKB_BLOCKS[k];
+    return sh.getRange(b.first, b.col + KKB_OFFSET.method, b.last - b.first + 1, 1).getValues().some(x => String(x[0]).trim() === name);
+  });
+  if (used) return { status: 'error', message: '費目管理の費目に設定されているため削除できません' };
+  sh.getRange(KKB_METHOD.first + i, KKB_METHOD.col).clearContent();
+  kkbApiSetHidden_({ target: 'method', key: name, to: false });
+  return { status: 'done' };
 }
