@@ -4,6 +4,7 @@ import { useRegisterSW } from 'virtual:pwa-register/react';
 import { useApp } from './lib/store';
 import type { Op, SheetRow } from './lib/types';
 import { List as ListScreen } from './ui/List';
+import { Csv } from './ui/Csv';
 import { EntryForm } from './ui/EntryForm';
 import { Home } from './ui/Home';
 import { Settings } from './ui/Settings';
@@ -69,7 +70,7 @@ export function App() {
         {tab === 'home' && <Home app={app} />}
         {tab === 'settings' && <Settings app={app} onEdit={op => { setEditing(op); setEntryOpen(true); }} />}
         {tab === 'list' && <ListScreen app={app} onEditRow={r => { setEditing(null); setEditRow(r); setEntryOpen(true); }} onEditOp={op => { setEditRow(null); setEditing(op); setEntryOpen(true); }} />}
-        {tab === 'csv' && <p className="muted section">この画面は次の段階で作ります。</p>}
+        {tab === 'csv' && <Csv app={app} />}
       </main>
 
       {app.notice && (

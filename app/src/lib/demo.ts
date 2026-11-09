@@ -1,4 +1,4 @@
-import { ApiError, type Api, type PullResult, type PushResult } from './api';
+import { ApiError, type Api, type CsvApplyItem, type CsvApplyResult, type CsvItem, type CsvReadResult, type PullResult, type PushResult } from './api';
 import { daysInMonth, parts, today, ymd } from './date';
 import type { EditOp, Master, Op, SheetRow } from './types';
 
@@ -40,6 +40,20 @@ function seedRows(): SheetRow[] {
   return rows;
 }
 
+function demoCsv(): CsvItem[] {
+  const d = today(), card = '三井住友VISAカード(C)', V = '支出（変動費）';
+  const base = { date: d, method: card, kubun: V, sat: 'ー', status: '要確認', j: '', looseRows: [] as number[], looseSure: false };
+  return [
+    { ...base, importId: 'demo-1', merchant: 'ＭＹＢ サンプル店', amount: 1280, himoku: '🍙 食費', reason: '店舗基本設定（MYB）' },
+    { ...base, importId: 'demo-2', merchant: 'カフェB', amount: 980, himoku: '☕ 外食・カフェ', reason: 'Rawの確定履歴（同一利用先の最新利用日）' },
+    { ...base, importId: 'demo-3', merchant: 'サンプル商店', amount: 3300, himoku: '', reason: '判定できず（要確認）' },
+    { ...base, importId: 'demo-4', merchant: 'スーパーA', amount: 1570, himoku: '🍙 食費', reason: '既存の店名ルール', j: '記録済候補' },
+    { ...base, importId: 'demo-5', merchant: 'サンプル薬局', amount: 700, himoku: '🧴 日用品', reason: '既存の店名ルール', looseRows: [12], looseSure: true },
+    { ...base, importId: 'demo-6', merchant: 'サンプル書店', amount: 500, himoku: '', reason: '判定できず（要確認）', j: '取込内重複候補' },
+    { ...base, importId: 'demo-7', merchant: 'サンプル書店', amount: 500, himoku: '', reason: '判定できず（要確認）', j: '取込内重複候補' },
+  ];
+}
+
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export class DemoApi implements Api {
@@ -76,6 +90,34 @@ export class DemoApi implements Api {
     });
     if (this.loseNextResponse) { this.loseNextResponse = false; throw new ApiError('network'); }   // 書込は済んだが応答が届かない
     return results;
+  }
+
+  // CSV：ファイルの中身は使わず、架空の明細を候補にする。同じ明細は2回目には増えない。
+  csvRows: CsvItem[] = [];
+  private csvSeen = false;
+
+  async csvRead(): Promise<CsvReadResult> {
+    await this.net();
+    const samples = demoCsv();
+    if (this.csvSeen) return { added: 0, skipped: samples.length, errors: [] };
+    this.csvSeen = true;
+    this.csvRows = samples;
+    return { added: samples.length, skipped: 0, errors: [] };
+  }
+
+  async csvList() { await this.net(); return this.csvRows.map(r => ({ ...r })); }
+
+  async csvApply(items: CsvApplyItem[]): Promise<CsvApplyResult[]> {
+    await this.net();
+    return items.map(it => {
+      const i = this.csvRows.findIndex(r => r.importId === it.importId);
+      if (i < 0) return { importId: it.importId, status: 'done' as const, repeated: true };
+      const [r] = this.csvRows.splice(i, 1);
+      if (it.action === 'add' || it.action === 'force') {
+        this.rows.push({ id: 's:csv' + r.importId, date: r.date, amount: r.amount, kubun: it.kubun!, himoku: it.himoku!, method: r.method, g: r.merchant, sat: it.sat || 'ー', source: 'カードCSV' });
+      }
+      return { importId: it.importId, status: 'done' as const };
+    });
   }
 
   async edit(op: EditOp): Promise<PushResult> {

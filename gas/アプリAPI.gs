@@ -76,6 +76,9 @@ function doPost(e) {
       const ss = SpreadsheetApp.getActive();
       if (req.action === 'pull') return kkbApiJson_(kkbApiPull_(ss));
       if (req.action === 'push') return kkbApiJson_(kkbApiPush_(ss, req.ops || [], device));
+      if (req.action === 'csvRead') return kkbApiJson_(kkbApiCsvRead_(ss, req.files || []));
+      if (req.action === 'csvList') return kkbApiJson_(kkbApiCsvList_(ss));
+      if (req.action === 'csvApply') return kkbApiJson_(kkbApiCsvApply_(ss, req.items || []));
       return kkbApiJson_({ ok: false, error: 'unknown_action' });
     } finally {
       lock.releaseLock();
@@ -299,6 +302,180 @@ function kkbApiValidate_(tx) {
 function kkbApiPlaceDetail_(place, detail) {
   place = String(place || '').trim(); detail = String(detail || '').trim();
   return place && detail ? place + '／' + detail : place || detail;
+}
+
+// ---------- カード明細CSV ----------
+// CSVの読み取り・費目推測は コード.gs の関数をそのまま使う。03_Card_Import の J 列（照合・重複判定）の数式も変えない。
+
+const KKB_CSV = Object.freeze({ LAST_ROW: 4011, PENDING: ['要確認', '取込可', 'エラー'], LINK_MARK: '記録済みと確認：Raw行', FORCE_MARK: '別取引として確認' });
+
+function kkbApiDateText_(v, tz) {
+  if (v instanceof Date) return Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+  const m = /^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/.exec(String(v || '').trim());
+  return m ? m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2) : '';
+}
+const kkbApiCardKey_ = (date, merchant, amount, method) => [date, Number(amount), method, String(merchant || '').trim()].join('|');
+
+function kkbApiCardRows_(sheet, columns) {
+  const n = Math.max(sheet.getLastRow() - KKV3_CARD.FIRST_DATA_ROW + 1, 0);
+  return n ? sheet.getRange(KKV3_CARD.FIRST_DATA_ROW, 1, n, columns).getValues() : [];
+}
+
+/**
+ * CSV を候補として 03_Card_Import に読み込む。
+ * 同じ内容の行が既にあれば、その件数分だけ読み飛ばす。ファイル名が違う再ダウンロードや
+ * Driveフォルダ経由で読み込み済みの明細は増えず、1ファイル内の同日同額の正当な複数購入は残る。
+ */
+function kkbApiCsvRead_(ss, files) {
+  const sheet = requireSheetV3_(ss, KKV3_CARD.IMPORT_SHEET);
+  const tz = ss.getSpreadsheetTimeZone();
+  const context = buildCardClassificationContext_(ss);
+  const pool = {};
+  kkbApiCardRows_(sheet, 6).forEach(r => {
+    const d = kkbApiDateText_(r[2], tz);
+    if (d) { const k = kkbApiCardKey_(d, r[3], r[4], r[5]); pool[k] = (pool[k] || 0) + 1; }
+  });
+  const rows = [], errors = [];
+  let skipped = 0;
+  files.forEach(f => {
+    const name = String(f.name || 'card.csv');
+    try {
+      const bytes = Utilities.base64Decode(String(f.base64 || ''));
+      const blob = Utilities.newBlob(bytes, 'text/csv', name);
+      const digest = kkbApiHash_(Utilities.base64Encode(bytes)).slice(0, 10);
+      const parsed = parseCardCsvFile_({ getName: () => name, getBlob: () => blob });
+      if (!parsed.items.length) throw new Error('明細行が見つかりませんでした。');
+      const avail = Object.assign({}, pool), adds = {};
+      parsed.items.forEach((item, index) => {
+        const k = kkbApiCardKey_(kkbApiDateText_(item.usedAt, tz), item.merchant, item.amount, parsed.paymentMethod);
+        if (avail[k] > 0) { avail[k]--; skipped++; return; }
+        adds[k] = (adds[k] || 0) + 1;
+        const c = inferCardClassification_(item.merchant, context);
+        rows.push({ importId: 'CARD-A' + digest + '-' + String(index + 1).padStart(4, '0'), usedAt: item.usedAt, merchant: item.merchant, amount: item.amount,
+          method: parsed.paymentMethod, category: c.category, fee: c.fee, name: name, note: parsed.note + '／分類：' + c.reason });
+      });
+      Object.keys(adds).forEach(k => { pool[k] = (pool[k] || 0) + adds[k]; });
+    } catch (e) {
+      errors.push(name + '：' + e.message);
+    }
+  });
+  if (rows.length) {
+    const start = findFirstBlankByColumn_(sheet, KKV3_CARD.FIRST_DATA_ROW, 3);
+    if (start + rows.length - 1 > KKB_CSV.LAST_ROW) return { ok: false, error: 'full', message: 'カード明細取込の行数の上限を超えます' };
+    // コード.gs（readCardCsvFiles）と同じ順：区分まで → 候補の再計算 → 行ごとの入力規則 → 費目
+    const now = new Date();
+    sheet.getRange(start, 1, rows.length, 7).setValues(rows.map(r => [r.importId, now, r.usedAt, r.merchant, r.amount, r.method, r.category]));
+    sheet.getRange(start, 9, rows.length, 1).setValues(rows.map(() => ['ー']));
+    sheet.getRange(start, 11, rows.length, 4).setValues(rows.map(r => ['要確認', 'カードCSV', r.name, r.note]));
+    SpreadsheetApp.flush();
+    rows.forEach((_, i) => {
+      const rule = SpreadsheetApp.newDataValidation().requireValueInRange(sheet.getRange(start + i, 15, 1, 29), true).setAllowInvalid(false).build();
+      sheet.getRange(start + i, 8).setDataValidation(rule);
+    });
+    sheet.getRange(start, 8, rows.length, 1).setValues(rows.map(r => [r.fee]));
+    SpreadsheetApp.flush();
+  }
+  return { ok: true, added: rows.length, skipped: skipped, errors: errors };
+}
+
+/** 確認待ちの候補を返す。手入力の詳細が空欄で 日付・金額・支払方法 が同じ取引は、J列とは別に「候補」として示す。 */
+function kkbApiCsvList_(ss) {
+  const sheet = requireSheetV3_(ss, KKV3_CARD.IMPORT_SHEET);
+  const tz = ss.getSpreadsheetTimeZone();
+  const all = kkbApiCardRows_(sheet, 14);
+  const pending = [];
+  const linked = {};
+  all.forEach((r, i) => {
+    const note = String(r[13] || '');
+    const at = note.indexOf(KKB_CSV.LINK_MARK);
+    if (at >= 0) linked[parseInt(note.slice(at + KKB_CSV.LINK_MARK.length), 10)] = true;
+    if (r[0] && KKB_CSV.PENDING.indexOf(String(r[10]).trim()) >= 0) pending.push({ r: r, row: KKV3_CARD.FIRST_DATA_ROW + i });
+  });
+
+  const raw = requireSheetV3_(ss, KKB_API.RAW_SHEET);
+  const n = Math.max(raw.getLastRow() - KKB_API.FIRST_ROW + 1, 0);
+  const blanks = {};
+  (n ? raw.getRange(KKB_API.FIRST_ROW, 2, n, 6).getValues() : []).forEach((v, i) => {
+    const row = KKB_API.FIRST_ROW + i, d = kkbApiDateText_(v[0], tz);
+    if (d && !String(v[5]).trim() && !linked[row]) { const k = [d, Number(v[1]), String(v[4]).trim()].join('|'); (blanks[k] = blanks[k] || []).push(row); }
+  });
+  const pendingCount = {};
+  pending.forEach(p => { const k = [kkbApiDateText_(p.r[2], tz), Number(p.r[4]), String(p.r[5]).trim()].join('|'); pendingCount[k] = (pendingCount[k] || 0) + 1; });
+
+  const items = pending.map(p => {
+    const r = p.r, date = kkbApiDateText_(r[2], tz), j = String(r[9] || '').trim();
+    const k = [date, Number(r[4]), String(r[5]).trim()].join('|');
+    const free = blanks[k] || [];
+    const note = String(r[13] || '');
+    const at = note.indexOf('分類：');
+    return { importId: String(r[0]), date: date, merchant: String(r[3] || '').trim(), amount: Number(r[4]), method: String(r[5] || '').trim(),
+      kubun: String(r[6] || '').trim(), himoku: String(r[7] || '').trim(), sat: String(r[8] || '').trim(), j: j, status: String(r[10]).trim(),
+      reason: at >= 0 ? note.slice(at + 3) : '', looseRows: j ? [] : free.slice(0, 3), looseSure: !j && free.length === 1 && pendingCount[k] === 1 };
+  });
+  return { ok: true, items: items };
+}
+
+/**
+ * 候補の処理：add=未記録として反映 / force=重複候補だが別取引として反映 / recorded=記録済みなので追加しない / exclude=対象外。
+ * 処理済みの行は状態で判定するので、応答が届かず再送しても増えない。
+ */
+function kkbApiCsvApply_(ss, items) {
+  const sheet = requireSheetV3_(ss, KKV3_CARD.IMPORT_SHEET);
+  const raw = requireSheetV3_(ss, KKB_API.RAW_SHEET);
+  const index = {};
+  kkbApiCardRows_(sheet, 14).forEach((r, i) => { if (r[0]) index[String(r[0])] = { row: KKV3_CARD.FIRST_DATA_ROW + i, status: String(r[10]).trim(), note: String(r[13] || '') }; });
+  const results = [], adds = [];
+  items.forEach(it => {
+    const t = index[it.importId];
+    if (!t) { results.push({ importId: it.importId, status: 'error', error: 'not_found' }); return; }
+    if (KKB_CSV.PENDING.indexOf(t.status) < 0) { results.push({ importId: it.importId, status: 'done', repeated: true }); return; }
+    if (it.action === 'exclude') { sheet.getRange(t.row, 11).setValue('対象外'); results.push({ importId: it.importId, status: 'done' }); return; }
+    if (it.action === 'recorded') {
+      sheet.getRange(t.row, 11).setValue('重複除外');
+      if (it.rawRow) sheet.getRange(t.row, 14).setValue(t.note + '／' + KKB_CSV.LINK_MARK + Number(it.rawRow));
+      results.push({ importId: it.importId, status: 'done' });
+      return;
+    }
+    if ((it.action !== 'add' && it.action !== 'force') || KKB_API.KUBUN.indexOf(it.kubun) < 0 || !it.himoku) { results.push({ importId: it.importId, status: 'error', error: 'invalid' }); return; }
+    sheet.getRange(t.row, 7).setValue(it.kubun);
+    adds.push({ it: it, t: t });
+  });
+  SpreadsheetApp.flush();
+
+  const ready = [];
+  adds.forEach(a => {
+    const v = sheet.getRange(a.t.row, 1, 1, 43).getValues()[0];
+    const candidates = v.slice(14, 43).map(x => String(x || '').trim());
+    if (candidates.indexOf(a.it.himoku) < 0) { results.push({ importId: a.it.importId, status: 'error', error: 'invalid', message: '区分と費目の組合せ' }); return; }
+    if (String(v[9] || '').trim() && a.it.action !== 'force') { results.push({ importId: a.it.importId, status: 'error', error: 'duplicate', message: String(v[9]) }); return; }
+    if (!(v[2] instanceof Date) || !Number(v[4]) || !String(v[3]).trim() || !String(v[5]).trim()) { results.push({ importId: a.it.importId, status: 'error', error: 'invalid', message: '未完成の明細' }); return; }
+    const sat = KKB_API.SATISFACTION.indexOf(a.it.sat) >= 0 ? a.it.sat : 'ー';
+    sheet.getRange(a.t.row, 8).setValue(a.it.himoku);
+    sheet.getRange(a.t.row, 9).setValue(sat);
+    ready.push({ a: a, v: v, sat: sat });
+  });
+
+  // 01_Raw_Data の空き行に入れる（削除でできた途中の空行も使う）。上限行を超えては書かない。
+  const blanks = [];
+  raw.getRange(KKB_API.FIRST_ROW, 2, KKB_API.LAST_ROW - KKB_API.FIRST_ROW + 1, 1).getDisplayValues().forEach((r, i) => { if (!r[0]) blanks.push(KKB_API.FIRST_ROW + i); });
+  const now = new Date();
+  const placed = ready.slice(0, blanks.length).map((x, i) => Object.assign(x, { rawRow: blanks[i] }));
+  ready.slice(blanks.length).forEach(x => results.push({ importId: x.a.it.importId, status: 'error', error: 'full' }));
+  // コード.gs と同じ順：区分を含む列 → 候補の再計算 → 費目
+  placed.forEach(x => {
+    raw.getRange(x.rawRow, 2, 1, 3).setValues([[x.v[2], Number(x.v[4]), x.a.it.kubun]]);
+    raw.getRange(x.rawRow, 6, 1, 4).setValues([[String(x.v[5]).trim(), String(x.v[3]).trim(), x.sat, 'カードCSV']]);
+    raw.getRange(x.rawRow, 12).setValue(now);
+  });
+  if (placed.length) SpreadsheetApp.flush();
+  placed.forEach(x => {
+    raw.getRange(x.rawRow, 5).setValue(x.a.it.himoku);
+    sheet.getRange(x.a.t.row, 11).setValue('取込済');
+    if (x.a.it.action === 'force') sheet.getRange(x.a.t.row, 14).setValue(x.a.t.note + '／' + KKB_CSV.FORCE_MARK);
+    results.push({ importId: x.a.it.importId, status: 'done' });
+  });
+  SpreadsheetApp.flush();
+  return { ok: true, results: results };
 }
 
 // ---------- 共通 ----------

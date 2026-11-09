@@ -12,7 +12,22 @@ export class ApiError extends Error {
   constructor(public code: ApiErrorCode, message: string = code) { super(message); }
 }
 
+export interface CsvItem {
+  importId: string; date: string; merchant: string; amount: number; method: string; kubun: string; himoku: string; sat: string;
+  j: string;            // 03_Card_Import J列の判定（空＝未記録）
+  status: string; reason: string;
+  looseRows: number[];  // 詳細が空欄で 日付・金額・支払方法 が同じ取引の行
+  looseSure: boolean;   // 候補が互いに1件ずつで矛盾がない
+}
+export type CsvAction = 'add' | 'force' | 'recorded' | 'exclude';
+export interface CsvApplyItem { importId: string; action: CsvAction; kubun?: string; himoku?: string; sat?: string; rawRow?: number }
+export interface CsvApplyResult { importId: string; status: 'done' | 'error'; error?: string; message?: string; repeated?: boolean }
+export interface CsvReadResult { added: number; skipped: number; errors: string[] }
+
 export interface Api {
+  csvRead(files: { name: string; base64: string }[]): Promise<CsvReadResult>;
+  csvList(): Promise<CsvItem[]>;
+  csvApply(items: CsvApplyItem[]): Promise<CsvApplyResult[]>;
   pair(code: string, deviceName: string): Promise<string>;
   pull(): Promise<PullResult>;
   push(ops: Op[]): Promise<PushResult[]>;
@@ -57,6 +72,15 @@ export class SheetApi implements Api {
   async push(ops: Op[]) {
     const data = await this.call({ action: 'push', ops: ops.map(o => ({ opId: o.opId, type: o.type, tx: o.tx })) });
     return data.results as PushResult[];
+  }
+  async csvRead(files: { name: string; base64: string }[]) {
+    return (await this.call({ action: 'csvRead', files })) as unknown as CsvReadResult;
+  }
+  async csvList() {
+    return (await this.call({ action: 'csvList' })).items as CsvItem[];
+  }
+  async csvApply(items: CsvApplyItem[]) {
+    return (await this.call({ action: 'csvApply', items })).results as CsvApplyResult[];
   }
   async edit(op: EditOp) {
     const data = await this.call({ action: 'push', ops: [op] });
