@@ -64,9 +64,7 @@ export class DemoApi implements Api {
     await this.net();
     const s = this.settings, it = s.items.find(i => i.row === op.row);
     await new Promise(r => setTimeout(r, 600));
-    if (op.type === 'deleteMethod') s.methods = s.methods.filter(m => m.name !== op.name);
-    else if (op.type === 'addMethod') s.methods.push({ name: String(op.name), hidden: false });
-    else if (op.type === 'hide') { const m = s.methods.find(x => x.name === op.key), h = s.items.find(x => `${x.kubun}|${x.himoku}` === op.key); (m ?? h)!.hidden = !!op.to; }
+    if (op.type === 'hide') { const m = s.methods.find(x => x.name === op.key), h = s.items.find(x => `${x.kubun}|${x.himoku}` === op.key); (m ?? h)!.hidden = !!op.to; }
     else if (it) (it as unknown as Record<string, unknown>)[String(op.type)] = op.to;
     return { status: 'done' };
   }

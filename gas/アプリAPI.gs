@@ -653,9 +653,7 @@ function kkbApiSetCell_(sh, row, col, from, to) {
 
 function kkbApiSettingsApply_(ss, op) {
   const sh = requireSheetV3_(ss, '費目管理');
-  if (op.type === 'addMethod') return kkbApiAddMethod_(sh, String(op.name || '').trim());
   if (op.type === 'hide') return kkbApiSetHidden_(op);
-  if (op.type === 'deleteMethod') return kkbApiDeleteMethod_(ss, sh, String(op.name || '').trim());
   const b = KKB_BLOCKS[op.kubun];
   if (!b) return { status: 'error', message: '区分が正しくありません' };
   const row = Number(op.row);
@@ -666,7 +664,6 @@ function kkbApiSettingsApply_(ss, op) {
     if (op.kubun !== KKB_VAR) return { status: 'error', message: '週管理は変動費だけです' };
     return kkbApiSetCell_(sh, row, KKB_WEEK_COL, !!op.from, !!op.to);
   }
-  if (op.type === 'group') return kkbApiSetGroup_(ss, sh, op, b, row);
   if (op.type === 'budget') {
     const col = b.col + KKB_OFFSET.budget;
     if (op.kubun !== KKB_VAR) return kkbApiSetCell_(sh, row, col, Number(op.from), Number(op.to));
@@ -675,42 +672,12 @@ function kkbApiSettingsApply_(ss, op) {
   return { status: 'error', message: '未対応の操作です' };
 }
 
-function kkbApiAddMethod_(sh, name) {
-  if (!name) return { status: 'error', message: '名前を入力してください' };
-  const v = sh.getRange(KKB_METHOD.first, KKB_METHOD.col, KKB_METHOD.last - KKB_METHOD.first + 1, 1).getValues().map(x => String(x[0] || '').trim());
-  if (v.indexOf(name) >= 0) return { status: 'done', repeated: true };
-  const i = v.indexOf('');
-  if (i < 0) return { status: 'error', message: '支払方法の入力欄がいっぱいです' };
-  sh.getRange(KKB_METHOD.first + i, KKB_METHOD.col).setValue(name);
-  return { status: 'done' };
-}
-
 function kkbApiSetHidden_(op) {
   const h = kkbApiHidden_(), list = op.target === 'method' ? h.methods : h.items, at = list.indexOf(op.key);
   if (op.to && at < 0) list.push(op.key);
   if (!op.to && at >= 0) list.splice(at, 1);
   PropertiesService.getScriptProperties().setProperty('KKB_HIDDEN', JSON.stringify(h));
   return { status: 'done' };
-}
-
-function kkbApiSetGroup_(ss, sh, op, b, row) {
-  const col = b.col + KKB_OFFSET.group;
-  const r = kkbApiSetCell_(sh, row, col, op.from, String(op.to || '').trim());
-  if (r.status !== 'done' || r.repeated) return r;
-  // 同じ費目名の行（口座違い）は集計先が分かれないよう、同じ表示名にそろえる
-  sh.getRange(b.first, b.col, b.last - b.first + 1, KKB_OFFSET.group + 1).getValues().forEach((x, i) => {
-    if (String(x[0]).trim() === op.himoku && String(x[KKB_OFFSET.group]).trim() === op.from) sh.getRange(b.first + i, col).setValue(String(op.to).trim());
-  });
-  if (op.kubun !== KKB_VAR) return r;
-  // 同じ表示名の行が残っていなければ、固定済みの月の見出しも新しい名前に合わせる
-  const still = sh.getRange(b.first, col, b.last - b.first + 1, 1).getValues().some(x => String(x[0]).trim() === op.from);
-  if (still) return r;
-  const q = s => '"' + String(s).replace(/"/g, '""') + '",';
-  kkbApiPastSheets_(ss).filter(p => kkbApiFrozenFormulas_(p.sheet)).forEach(p => {
-    const range = p.sheet.getRange('G23:G43');
-    range.setFormulas(range.getFormulas().map(x => [x[0].split(q(op.from)).join(q(op.to))]));
-  });
-  return r;
 }
 
 // ---- 過去の月の予算を固定 ----
@@ -785,25 +752,3 @@ function kkbApiUnfreezeAll() {
   ui.alert('解除しました');
 }
 
-// ---- 支払方法の削除 ----
-// 明細で使っているものは消さない（過去の集計が外れるため）。
-function kkbApiRawUse_(ss) {
-  const raw = requireSheetV3_(ss, KKB_API.RAW_SHEET);
-  const n = Math.max(Math.min(raw.getLastRow(), KKB_API.LAST_ROW) - KKB_API.FIRST_ROW + 1, 0);
-  return n ? raw.getRange(KKB_API.FIRST_ROW, 4, n, 3).getValues().map(r => ({ kubun: String(r[0]).trim(), himoku: String(r[1]).trim(), method: String(r[2]).trim() })) : [];
-}
-
-function kkbApiDeleteMethod_(ss, sh, name) {
-  const v = sh.getRange(KKB_METHOD.first, KKB_METHOD.col, KKB_METHOD.last - KKB_METHOD.first + 1, 1).getValues().map(x => String(x[0] || '').trim());
-  const i = v.indexOf(name);
-  if (!name || i < 0) return { status: 'done', repeated: true };
-  if (kkbApiRawUse_(ss).some(r => r.method === name)) return { status: 'error', message: '明細で使われているため削除できません。使わない場合は「隠す」にしてください' };
-  const used = Object.keys(KKB_BLOCKS).some(k => {
-    const b = KKB_BLOCKS[k];
-    return sh.getRange(b.first, b.col + KKB_OFFSET.method, b.last - b.first + 1, 1).getValues().some(x => String(x[0]).trim() === name);
-  });
-  if (used) return { status: 'error', message: '費目管理の費目に設定されているため削除できません' };
-  sh.getRange(KKB_METHOD.first + i, KKB_METHOD.col).clearContent();
-  kkbApiSetHidden_({ target: 'method', key: name, to: false });
-  return { status: 'done' };
-}

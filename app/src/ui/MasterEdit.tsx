@@ -1,4 +1,4 @@
-import { CircleAlert, LoaderCircle, Trash2 } from 'lucide-react';
+import { CircleAlert, LoaderCircle } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, type SettingsData, type SettingsItem, type SettingsOp } from '../lib/api';
 import { displayName, KUBUN_LABEL, yen } from '../lib/display';
@@ -7,14 +7,13 @@ import { KUBUN } from '../lib/types';
 import { Sheet } from './Sheet';
 
 const VAR = '支出（変動費）';
-type Draft = { group: string; order: string; budget: string; weekly: boolean; hidden: boolean };
-const draftOf = (i: SettingsItem): Draft => ({ group: i.group, order: String(i.order), budget: String(i.budget), weekly: i.weekly, hidden: i.hidden });
+type Draft = { order: string; budget: string; weekly: boolean; hidden: boolean };
+const draftOf = (i: SettingsItem): Draft => ({ order: String(i.order), budget: String(i.budget), weekly: i.weekly, hidden: i.hidden });
 
 /** 変更のあった項目だけを送る。変更前の値を付け、スプレッドシート側の変更を上書きしない。 */
 export function diffOps(i: SettingsItem, d: Draft): SettingsOp[] {
   const base = { kubun: i.kubun, row: i.row, himoku: i.himoku };
   const ops: SettingsOp[] = [];
-  if (d.group.trim() && d.group.trim() !== i.group) ops.push({ ...base, type: 'group', from: i.group, to: d.group.trim() });
   if (Number(d.order) !== i.order) ops.push({ ...base, type: 'order', from: i.order, to: Number(d.order) });
   if (Number(d.budget) !== i.budget) ops.push({ ...base, type: 'budget', from: i.budget, to: Number(d.budget) });
   if (d.weekly !== i.weekly) ops.push({ ...base, type: 'weekly', from: i.weekly, to: d.weekly });
@@ -34,10 +33,8 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
   const [draft, setDraft] = useState<Draft | null>(null);
   const [phase, setPhase] = useState('');
   const busy = !!phase;
-  const [confirming, setConfirming] = useState('');
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
-  const [newMethod, setNewMethod] = useState('');
 
   const load = useCallback(async (keepError = false) => {
     if (!api) return;
@@ -48,7 +45,7 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
 
   async function run(ops: SettingsOp[], after?: () => void) {
     if (!api || !ops.length) return;
-    setPhase('スプレッドシートに保存しています'); setError(''); setDone(''); setConfirming('');
+    setPhase('スプレッドシートに保存しています'); setError(''); setDone('');
     try {
       for (const op of ops) {
         const r = await api.settingsApply(op);
@@ -74,7 +71,7 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
   const close = () => { setEdit(null); setDraft(null); };
 
   return (
-    <Sheet open={open} onOpenChange={o => { if (!o && !busy) { close(); setConfirming(''); onClose(); } }} title={edit ? displayName(edit.himoku) : '費目・予算・支払方法'}>
+    <Sheet open={open} onOpenChange={o => { if (!o && !busy) { close(); onClose(); } }} title={edit ? displayName(edit.himoku) : '費目・予算・支払方法'}>
       <div className="masterstatus">
         <div role="status">
           {phase && <p className="savingbar"><LoaderCircle size={24} strokeWidth={2} className="spin" aria-hidden="true" /><span>{phase}<small>1分ほどかかることがあります</small></span></p>}
@@ -86,8 +83,6 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
 
       {edit && draft ? (
         <div className="masterform">
-          <label>月別表示名<input className="input" value={draft.group} onChange={e => setDraft({ ...draft, group: e.target.value })} /></label>
-          <p className="hint">月別の画面と月シートの見出しが変わります。入力画面の費目名は変わりません。過去の明細もそのまま集計されます。</p>
           <label>表示順<input className="input num" inputMode="numeric" value={draft.order} onChange={e => setDraft({ ...draft, order: e.target.value })} /></label>
           <label>月額予算<input className="input num" inputMode="numeric" value={draft.budget} onChange={e => setDraft({ ...draft, budget: e.target.value })} /></label>
           {budgetChanged && <p className="hint">{edit.kubun === VAR ? '今月以降の予算が変わります。過去の月は変更前の金額のままです。' : '費目管理の予算が変わります。月ごとの記録はないため、アプリでは今月以降に表示します。'}</p>}
@@ -105,7 +100,7 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
           <div className="list section">
             {list.map(i => (
               <button key={i.row} type="button" className="li pick" onClick={() => { setDone(''); setEdit(i); setDraft(draftOf(i)); }}>
-                <span className="grow">{displayName(i.himoku)}{i.hidden && <span className="muted">（非表示）</span>}{i.group && displayName(i.group) !== displayName(i.himoku) && <small className="muted groupname">月別表示名：{displayName(i.group)}</small>}</span>
+                <span className="grow">{displayName(i.himoku)}{i.hidden && <span className="muted">（非表示）</span>}</span>
                 {i.weekly && <span className="tag">週</span>}<span className="num muted">{i.budget ? yen(i.budget) : ''}</span>
               </button>
             ))}
@@ -116,16 +111,10 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
             {data.methods.map(m => (
               <label key={m.name} className="li check"><span className="grow">{m.name}</span>
                 <span className="muted">隠す</span><input type="checkbox" disabled={busy} checked={m.hidden} onChange={e => run([{ type: 'hide', target: 'method', key: m.name, to: e.target.checked }])} />
-                <button type="button" className={confirming === 'm:' + m.name ? 'iconbtn dangerbtn on' : 'iconbtn dangerbtn'} disabled={busy} aria-label={confirming === 'm:' + m.name ? m.name + 'をもう一度押すと削除します' : m.name + 'を削除'}
-                  onClick={e => { e.preventDefault(); if (confirming === 'm:' + m.name) run([{ type: 'deleteMethod', name: m.name }]); else setConfirming('m:' + m.name); }}><Trash2 size={24} strokeWidth={2} aria-hidden="true" /></button>
               </label>
             ))}
           </div>
-          <div className="masterform section">
-            <input className="input" aria-label="支払方法の名前" placeholder="支払方法の名前" value={newMethod} onChange={e => setNewMethod(e.target.value)} />
-            <button type="button" className="secondary" style={{ width: '100%' }} disabled={busy || !newMethod.trim()} onClick={() => run([{ type: 'addMethod', name: newMethod.trim() }], () => setNewMethod(''))}>{busy ? '処理中' : '追加する'}</button>
-          {confirming.startsWith('m:') && <p className="hint">削除するときは、赤くなったごみ箱をもう一度押してください。明細で使っている支払方法は削除できません。</p>}
-          </div>
+          <p className="hint">支払方法の追加・削除は、スプレッドシートの費目管理で行います。</p>
         </>
       )}
     </Sheet>
