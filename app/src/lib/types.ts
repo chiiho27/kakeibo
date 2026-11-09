@@ -67,11 +67,13 @@ export interface MasterItem {
   group: string;       // 月別表示名
   order: number;
   weekly: boolean;     // 週管理対象（費目管理 P 列）
+  hidden?: boolean;    // アプリの候補から隠す（集計には含める）
 }
 
 export interface Master {
   items: MasterItem[];
   methods: string[];
+  hiddenMethods?: string[];
 }
 
 export interface Prefs {

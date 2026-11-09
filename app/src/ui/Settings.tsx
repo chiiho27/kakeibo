@@ -6,11 +6,13 @@ import { displayName, iconFor, KUBUN_LABEL, yen } from '../lib/display';
 import type { AppState } from '../lib/store';
 import { KUBUN, type Op } from '../lib/types';
 import { NmdMark } from './Home';
+import { MasterEdit } from './MasterEdit';
 
 const NMD_ICONS = ['lucide:sprout', 'lucide:leaf', 'lucide:star', 'lucide:smile', 'lucide:circle-check', 'lucide:heart'];
 const STATE_LABEL: Record<Op['state'], string> = { pending: '未送信', unknown: '送信確認中', failed: '受付不可' };
 
 export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => void }) {
+  const [editing, setEditing] = useState(false);
   const { conn, prefs, snap, ops } = app;
   const [url, setUrl] = useState(conn.url);
   const [code, setCode] = useState('');
@@ -143,7 +145,8 @@ export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => v
       </div>
 
       <h2 className="h">費目・予算・支払方法</h2>
-      <p className="hint">スプレッドシートの内容を表示しています。ここからの変更は未対応です。</p>
+      <button type="button" className="secondary" style={{ width: '100%', marginTop: 8 }} disabled={!app.api || !app.online} onClick={() => setEditing(true)}>費目・予算・支払方法を変更する</button>
+      <MasterEdit app={app} open={editing} onClose={() => setEditing(false)} />
       {!snap.master.items.length ? <p className="muted">スプレッドシートの取得前です</p> : (
         <div className="list" style={{ marginTop: 8 }}>
           {KUBUN.map(k => snap.master.items.filter(i => i.kubun === k).sort((a, b) => a.order - b.order).map(i => {

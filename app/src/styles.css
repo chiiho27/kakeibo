@@ -207,3 +207,9 @@ h2.h { font-size: 16px; margin: 32px 0 8px; }
 .yeartable th, .yeartable td { padding: 8px 4px; text-align: right; border-bottom: 1px solid var(--line); font-weight: 400; }
 .yeartable th:first-child { text-align: left; }
 .yeartable thead th { color: var(--muted); }
+
+/* 費目・予算の設定 */
+.masterform { display: grid; gap: 8px; }
+.masterform label { display: grid; gap: 4px; font-size: 14px; }
+.masterform label.check, label.check { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+label.check input { width: 24px; height: 24px; accent-color: var(--primary); }

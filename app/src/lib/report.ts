@@ -15,6 +15,9 @@ export interface SpecialFund {
   months: { label: string; plan: number | null; actual: number | null }[];
 }
 
+/** 固定済みの月の予算（月 → 月別表示名 → 金額）。スプレッドシートの月シートの値。 */
+export type FrozenBudgets = Record<string, Record<string, number>>;
+
 /** 年度は4月始まり（特別費管理の年度開始日・年間推移と同じ）。 */
 export const fiscalYearOf = (ymd: string) => {
   const [y, m] = ymd.split('-').map(Number);

@@ -1,7 +1,7 @@
-import type { SpecialFund } from './report';
+import type { FrozenBudgets, SpecialFund } from './report';
 import type { EditOp, Master, Op, SheetRow } from './types';
 
-export interface PullResult { rows: SheetRow[]; master: Master; special?: SpecialFund | null; serverTime: string; capacity?: { used: number; max: number } }
+export interface PullResult { rows: SheetRow[]; master: Master; special?: SpecialFund | null; frozen?: FrozenBudgets; serverTime: string; capacity?: { used: number; max: number } }
 export interface PushResult { opId: string; status: 'done' | 'error'; txId?: string; error?: string; message?: string; repeated?: boolean }
 
 /**
@@ -25,7 +25,14 @@ export interface CsvApplyItem { importId: string; action: CsvAction; kubun?: str
 export interface CsvApplyResult { importId: string; status: 'done' | 'error'; error?: string; message?: string; repeated?: boolean }
 export interface CsvReadResult { added: number; skipped: number; errors: string[] }
 
+export interface SettingsItem { kubun: string; row: number; himoku: string; group: string; order: number; budget: number; weekly: boolean; hidden: boolean }
+export interface SettingsData { items: SettingsItem[]; methods: { name: string; hidden: boolean }[] }
+export type SettingsOp = Record<string, unknown> & { type: string };
+export interface SettingsResult { status: 'done' | 'conflict' | 'error'; message?: string; repeated?: boolean }
+
 export interface Api {
+  settingsRead(): Promise<SettingsData>;
+  settingsApply(op: SettingsOp): Promise<SettingsResult>;
   csvRead(files: { name: string; base64: string }[]): Promise<CsvReadResult>;
   csvList(): Promise<CsvItem[]>;
   csvApply(items: CsvApplyItem[]): Promise<CsvApplyResult[]>;
@@ -66,6 +73,12 @@ export class SheetApi implements Api {
   async pair(code: string, deviceName: string) {
     const data = await this.call({ action: 'pair', code, deviceName });
     return String(data.token);
+  }
+  async settingsRead() {
+    return (await this.call({ action: 'settingsRead' })) as unknown as SettingsData;
+  }
+  async settingsApply(op: SettingsOp) {
+    return (await this.call({ action: 'settingsApply', op })) as unknown as SettingsResult;
   }
   async pull() {
     return (await this.call({ action: 'pull' })) as unknown as PullResult;

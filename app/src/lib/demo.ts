@@ -1,3 +1,4 @@
+import type { SettingsData, SettingsOp, SettingsResult } from './api';
 import { ApiError, type Api, type CsvApplyItem, type CsvApplyResult, type CsvItem, type CsvReadResult, type PullResult, type PushResult } from './api';
 import { daysInMonth, parts, today, ymd } from './date';
 import type { EditOp, Master, Op, SheetRow } from './types';
@@ -57,6 +58,17 @@ function demoCsv(): CsvItem[] {
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export class DemoApi implements Api {
+  private settings: SettingsData = { items: demoMaster().items.map((i, n) => ({ kubun: i.kubun, row: n + 3, himoku: i.himoku, group: i.group, order: i.order, budget: i.budget, weekly: i.weekly, hidden: false })), methods: demoMaster().methods.map(name => ({ name, hidden: false })) };
+  async settingsRead() { await this.net(); return structuredClone(this.settings); }
+  async settingsApply(op: SettingsOp): Promise<SettingsResult> {
+    await this.net();
+    const s = this.settings, it = s.items.find(i => i.row === op.row);
+    if (op.type === 'addMethod') s.methods.push({ name: String(op.name), hidden: false });
+    else if (op.type === 'add') s.items.push({ kubun: String(op.kubun), row: 1000 + s.items.length, himoku: String(op.himoku), group: String(op.group || op.himoku), order: Number(op.order) || 999, budget: Number(op.budget) || 0, weekly: false, hidden: false });
+    else if (op.type === 'hide') { const m = s.methods.find(x => x.name === op.key), h = s.items.find(x => `${x.kubun}|${x.himoku}` === op.key); (m ?? h)!.hidden = !!op.to; }
+    else if (it) (it as unknown as Record<string, unknown>)[String(op.type)] = op.to;
+    return { status: 'done' };
+  }
   rows: SheetRow[] = seedRows();
   ledger = new Map<string, PushResult>();   // 操作ID → 結果（サーバー側の処理済み台帳）
   offline = false;

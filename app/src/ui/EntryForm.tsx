@@ -47,7 +47,7 @@ function CalendarPicker({ value, onPick }: { value: string; onPick: (d: string) 
 
 export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppState; editing: Op | null; editRow: SheetRow | null; open: boolean; onClose: () => void }) {
   const { snap, prefs } = app;
-  const items = snap.master.items;
+  const items = snap.master.items.filter(i => !i.hidden);
 
   const himokuOf = (k: Kubun) => {
     const names = items.filter(i => i.kubun === k).sort((a, b) => a.order - b.order).map(i => i.himoku);
@@ -120,6 +120,7 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
   const methods = useMemo(() => {
     const s = new Set<string>([...prefs.quickMethods, prefs.defaultMethod, ...snap.master.methods]);
     items.forEach(i => i.methods.forEach(m => s.add(m)));
+    snap.master.hiddenMethods?.forEach(m => s.delete(m));
     snap.rows.forEach(r => r.method && s.add(r.method));
     return [...s].filter(Boolean);
   }, [prefs, snap, items]);

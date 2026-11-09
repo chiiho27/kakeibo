@@ -41,7 +41,9 @@ function Month({ app }: { app: AppState }) {
       </div>
       {GROUPS.map(([k, label]) => {
         const lines = monthGroups(app.snap.master, app.snap.rows, ym, k);
-        const hasBudget = k === '支出（変動費）' || k === '支出（固定費）';
+        // 固定費の予算は月ごとの記録がないので、過去の月には出さない
+        const hasBudget = k === '支出（変動費）' || (k === '支出（固定費）' && ym >= now);
+        const budgetOf = (l: { group: string; budget: number }) => (k === '支出（変動費）' ? app.snap.frozen?.[ym]?.[l.group] : undefined) ?? l.budget;
         return lines.length > 0 && (
           <section key={k} className="section">
             <h2 className="h" style={{ marginTop: 0 }}>{label}</h2>
@@ -49,7 +51,7 @@ function Month({ app }: { app: AppState }) {
               {lines.map(l => (
                 <div key={l.group} className="li reportitem">
                   <span className="grow">{displayName(l.group)}</span>
-                  <span className="num">{yen(l.actual)}{hasBudget && l.budget > 0 && <small className="muted"> / {yen(l.budget)}</small>}</span>
+                  <span className="num">{yen(l.actual)}{hasBudget && budgetOf(l) > 0 && <small className="muted"> / {yen(budgetOf(l))}</small>}</span>
                 </div>
               ))}
             </div>

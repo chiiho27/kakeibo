@@ -35,7 +35,7 @@ export async function syncNow(api: Api): Promise<SyncResult> {
     }
     try {
       const res = await api.pull();
-      const snapshot: Snapshot = { rows: res.rows, master: res.master, special: res.special, fetchedAt: res.serverTime, capacity: res.capacity };
+      const snapshot: Snapshot = { rows: res.rows, master: res.master, special: res.special, frozen: res.frozen, fetchedAt: res.serverTime, capacity: res.capacity };
       await setMeta('snapshot', snapshot);
       await setMeta('lastSync', res.serverTime);
       const ids = new Set(res.rows.map(r => r.id));

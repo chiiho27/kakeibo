@@ -1,4 +1,4 @@
-import type { SpecialFund } from './report';
+import type { FrozenBudgets, SpecialFund } from './report';
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { Connection, Master, Op, Prefs, SheetRow } from './types';
 
@@ -9,7 +9,7 @@ interface KkbDB extends DBSchema {
   meta: { key: string; value: unknown };
 }
 
-export interface Snapshot { rows: SheetRow[]; master: Master; special?: SpecialFund | null; fetchedAt: string; capacity?: { used: number; max: number } }
+export interface Snapshot { rows: SheetRow[]; master: Master; special?: SpecialFund | null; frozen?: FrozenBudgets; fetchedAt: string; capacity?: { used: number; max: number } }
 export interface Draft { [k: string]: unknown }
 
 let dbp: Promise<IDBPDatabase<KkbDB>> | null = null;

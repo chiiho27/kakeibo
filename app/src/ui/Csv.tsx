@@ -87,7 +87,7 @@ export function Csv({ app }: { app: AppState }) {
   if (!app.api) return <p className="muted section">スプレッドシートに接続すると使えます。</p>;
   if (!app.online) return <p className="muted section">CSVの取り込みはオンライン時にできます。</p>;
 
-  const options = snap.master.items.filter(i => i.kubun.startsWith('支出')).sort((a, b) => a.order - b.order);
+  const options = snap.master.items.filter(i => i.kubun.startsWith('支出') && !i.hidden).sort((a, b) => a.order - b.order);
   const review = items.filter(needsReview), plain = items.filter(i => !needsReview(i));
   const setChoice = (id: string, p: Partial<CsvChoice>) => setChoices(c => ({ ...c, [id]: { ...c[id], ...p } }));
 
