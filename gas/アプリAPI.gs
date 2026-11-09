@@ -580,8 +580,7 @@ function kkbApiInspectMaster() {
   dump('費目管理', 150, false);
   dump('96_Drop_Down', 4, false);
   dump('11月', 60, true);
-  const text = out.join('
-').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const text = out.join(String.fromCharCode(10)).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   SpreadsheetApp.getUi().showModalDialog(
     HtmlService.createHtmlOutput('<textarea style="width:100%;height:420px" readonly onclick="this.select()">' + text + '</textarea><p>クリックして全選択し、コピーしてください。</p>').setWidth(760).setHeight(520),
     '費目管理の構造（' + out.length + '行）');

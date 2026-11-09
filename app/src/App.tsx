@@ -34,7 +34,7 @@ export function App() {
     swipe.current = null;
     if (Math.abs(dx) < 70 || Math.abs(dy) > 45) return;
     const next = TABS[TABS.findIndex(x => x[0] === tab) + (dx < 0 ? 1 : -1)];
-    if (next) { setSlide(dx < 0 ? 'from-right' : 'from-left'); setTab(next[0]); window.scrollTo(0, 0); }
+    if (next) { setSlide(dx < 0 ? 'from-right' : 'from-left'); setTab(next[0]); }
   };
   // 新しい版は「更新」を押すまで適用しない。更新しても端末の未送信データは消えない。
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW();
@@ -44,6 +44,9 @@ export function App() {
     const t = setTimeout(() => app.setNotice(null), app.notice.retry ? 8000 : 4000);
     return () => clearTimeout(t);
   }, [app.notice]); // eslint-disable-line
+
+  // タブを切り替えたら、前の画面のスクロール位置を引き継がず先頭から表示する
+  useEffect(() => { window.scrollTo(0, 0); }, [tab]);
 
   if (!app.ready) return null;
   const unsent = app.ops.length;

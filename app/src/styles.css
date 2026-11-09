@@ -42,8 +42,8 @@ button { cursor: pointer; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 /* スマートフォン：今週 → 今月 → カレンダー。PC：左に今週・今月、右にカレンダー */
 @media (min-width: 720px) {
-  .home { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; grid-template-areas: "week cal" "month cal"; column-gap: 24px; align-items: start; }
-  .area-more { grid-column: 1 / -1; } .area-week { grid-area: week; } .area-cal { grid-area: cal; margin-top: 16px; } .area-month { grid-area: month; }
+  .home { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr; grid-template-areas: "more more" "week cal" "month cal"; column-gap: 24px; align-items: start; }
+  .area-more { grid-area: more; } .area-week { grid-area: week; } .area-cal { grid-area: cal; margin-top: 16px; } .area-month { grid-area: month; }
 }
 
 /* カレンダー（ホームの月表示・日付の選択） */

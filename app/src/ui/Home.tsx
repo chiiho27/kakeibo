@@ -30,6 +30,11 @@ export function Home({ app, onReport }: { app: AppState; onReport: (t: ReportTab
 
   return (
     <div className="home">
+      <nav className="section area-more filters" aria-label="集計">
+        <button type="button" onClick={() => onReport('month')}>月別</button>
+        <button type="button" onClick={() => onReport('year')}>年間</button>
+        <button type="button" onClick={() => onReport('special')}>特別費</button>
+      </nav>
       <section className="section card tint area-week" aria-labelledby="h-week">
         <h2 id="h-week">今週あと使える金額</h2>
         {!hasData ? <p className="muted">スプレッドシートの取得前です</p>
@@ -75,12 +80,6 @@ export function Home({ app, onReport }: { app: AppState; onReport: (t: ReportTab
           })}
         </div>
       </section>
-
-      <nav className="section area-more filters" aria-label="集計">
-        <button type="button" onClick={() => onReport('month')}>月別</button>
-        <button type="button" onClick={() => onReport('year')}>年間</button>
-        <button type="button" onClick={() => onReport('special')}>特別費</button>
-      </nav>
     </div>
   );
 }
