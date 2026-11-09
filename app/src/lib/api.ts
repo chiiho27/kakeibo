@@ -1,6 +1,7 @@
+import type { SpecialFund } from './report';
 import type { EditOp, Master, Op, SheetRow } from './types';
 
-export interface PullResult { rows: SheetRow[]; master: Master; serverTime: string; capacity?: { used: number; max: number } }
+export interface PullResult { rows: SheetRow[]; master: Master; special?: SpecialFund | null; serverTime: string; capacity?: { used: number; max: number } }
 export interface PushResult { opId: string; status: 'done' | 'error'; txId?: string; error?: string; message?: string; repeated?: boolean }
 
 /**

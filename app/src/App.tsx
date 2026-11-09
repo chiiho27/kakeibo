@@ -7,6 +7,7 @@ import { List as ListScreen } from './ui/List';
 import { Csv } from './ui/Csv';
 import { EntryForm } from './ui/EntryForm';
 import { Home } from './ui/Home';
+import { Reports, type ReportTab } from './ui/Reports';
 import { Settings } from './ui/Settings';
 
 type Tab = 'home' | 'list' | 'csv' | 'settings';
@@ -18,6 +19,7 @@ export function App() {
   const [editing, setEditing] = useState<Op | null>(null);
   const [editRow, setEditRow] = useState<SheetRow | null>(null);
   const [entryOpen, setEntryOpen] = useState(false);
+  const [report, setReport] = useState<ReportTab | null>(null);
   const [slide, setSlide] = useState('');
   const swipe = useRef<{ x: number; y: number } | null>(null);
 
@@ -67,7 +69,7 @@ export function App() {
       )}
 
       <main key={tab} className={slide} onTouchStart={swipeStart} onTouchEnd={swipeEnd}>
-        {tab === 'home' && <Home app={app} />}
+        {tab === 'home' && <Home app={app} onReport={setReport} />}
         {tab === 'settings' && <Settings app={app} onEdit={op => { setEditing(op); setEntryOpen(true); }} />}
         {tab === 'list' && <ListScreen app={app} onEditRow={r => { setEditing(null); setEditRow(r); setEntryOpen(true); }} onEditOp={op => { setEditRow(null); setEditing(op); setEntryOpen(true); }} />}
         {tab === 'csv' && <Csv app={app} />}
@@ -91,6 +93,7 @@ export function App() {
         ])}
       </nav>
 
+      <Reports app={app} tab={report} onTab={setReport} onClose={() => setReport(null)} />
       <EntryForm app={app} editing={editing} editRow={editRow} open={entryOpen} onClose={() => { setEntryOpen(false); setEditing(null); setEditRow(null); }} />
     </div>
   );

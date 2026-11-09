@@ -73,7 +73,7 @@ export class DemoApi implements Api {
     await this.net();
     const n = new Date(), p = (v: number) => String(v).padStart(2, '0');
     const serverTime = `${n.getFullYear()}/${p(n.getMonth() + 1)}/${p(n.getDate())} ${p(n.getHours())}:${p(n.getMinutes())}`;
-    return { rows: this.rows.map(r => ({ ...r, hash: hashOf(r) })), master: demoMaster(), serverTime, capacity: { used: this.rows.length, max: 4982 } };
+    return { rows: this.rows.map(r => ({ ...r, hash: hashOf(r) })), master: demoMaster(), special: { balance: 12000, outside: 3000, planned: 58000, actual: 15000, monthlyPlan: 10000, saved: 20000, used: 8000, months: [{ label: '2026/4', plan: 0, actual: 0 }, { label: '2026/5', plan: 20000, actual: 15000 }] }, serverTime, capacity: { used: this.rows.length, max: 4982 } };
   }
 
   async push(ops: Op[]): Promise<PushResult[]> {

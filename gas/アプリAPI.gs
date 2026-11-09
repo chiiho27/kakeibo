@@ -157,8 +157,27 @@ function kkbApiPull_(ss) {
     serverTime: kkbApiNow_(),
     rows: rows,
     master: kkbApiMaster_(ss),
+    special: kkbApiSpecial_(ss),
     capacity: { used: rows.length, max: KKB_API.LAST_ROW - KKB_API.FIRST_ROW + 1 },
   };
+}
+
+// 特別費管理の表示値を見出しで探して返す（読み取りのみ）。残高はシートの数式の結果をそのまま使う。
+function kkbApiSpecial_(ss) {
+  const sh = ss.getSheetByName('特別費管理');
+  if (!sh) return null;
+  const tz = ss.getSpreadsheetTimeZone();
+  const v = sh.getRange(1, 1, Math.min(sh.getLastRow(), 40), 4).getValues();
+  const num = x => (typeof x === 'number' ? x : null);
+  const find = label => { const r = v.find(a => String(a[0]).trim() === label); return r ? num(r[3]) : null; };
+  const head = v.findIndex(a => String(a[0]).trim() === '月');
+  const months = [];
+  if (head >= 0) v.slice(head + 1, head + 13).forEach(a => {
+    if (a[0] === '') return;
+    months.push({ label: a[0] instanceof Date ? Utilities.formatDate(a[0], tz, 'yyyy/M') : String(a[0]), plan: num(a[1]), actual: num(a[2]) });
+  });
+  return { balance: find('今使える確保残高'), outside: find('積立以外からの支出'), planned: find('年間予定額'), actual: find('年間支出実績'),
+    monthlyPlan: find('毎月の積立計画'), saved: find('実際の積立（開始後）'), used: find('積立から充当（開始後）'), months: months };
 }
 
 // 96_Drop_Down（G:O）と費目管理（週管理・入出金方法）を読む。値の変更はしない。

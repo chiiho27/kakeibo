@@ -4,6 +4,7 @@ import { daysInMonth, parts, today, weekdayMon, ymd } from '../lib/date';
 import { yen } from '../lib/display';
 import type { AppState } from '../lib/store';
 import { K_VAR } from '../lib/types';
+import type { ReportTab } from './Reports';
 
 const NMD: Record<string, LucideIcon> = { sprout: Sprout, leaf: Leaf, star: Star, smile: Smile, 'circle-check': CircleCheck, heart: Heart };
 
@@ -13,7 +14,7 @@ export function NmdMark({ icon, size = 24 }: { icon: string; size?: number }) {
   return <I size={size} strokeWidth={2} aria-hidden="true" />;
 }
 
-export function Home({ app }: { app: AppState }) {
+export function Home({ app, onReport }: { app: AppState; onReport: (t: ReportTab) => void }) {
   const { snap, ops, prefs } = app;
   const day = today();
   const [y, m] = parts(day);
@@ -74,6 +75,12 @@ export function Home({ app }: { app: AppState }) {
           })}
         </div>
       </section>
+
+      <nav className="section area-more filters" aria-label="集計">
+        <button type="button" onClick={() => onReport('month')}>月別</button>
+        <button type="button" onClick={() => onReport('year')}>年間</button>
+        <button type="button" onClick={() => onReport('special')}>特別費</button>
+      </nav>
     </div>
   );
 }
