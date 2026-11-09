@@ -33,6 +33,7 @@ function onOpen() {
     .addItem('接続コードを発行', 'kkbApiIssuePairCode')
     .addItem('接続中の端末を確認', 'kkbApiListDevices')
     .addItem('すべての端末の接続を解除', 'kkbApiRevokeAll')
+    .addItem('費目管理の構造を書き出す（読み取りのみ）', 'kkbApiInspectMaster')
     .addToUi();
 }
 
@@ -547,4 +548,41 @@ function kkbApiNow_() {
 
 function kkbApiJson_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// 設定変更を作る前に、数式・入力規則・保護の位置を確認するための読み取り専用の書き出し。
+// シートには何も書かない。手入力の金額は「#」に置き換える。
+function kkbApiInspectMaster() {
+  const ss = SpreadsheetApp.getActive();
+  const out = [];
+  const dump = (name, maxRows, onlyLinks) => {
+    const sh = ss.getSheetByName(name);
+    if (!sh) { out.push('## ' + name + '：なし'); return; }
+    const rows = Math.min(sh.getLastRow(), maxRows), cols = sh.getLastColumn();
+    out.push('## ' + name + ' 行' + sh.getLastRow() + ' 列' + cols + ' 非表示:' + sh.isSheetHidden());
+    const range = sh.getRange(1, 1, rows, cols), f = range.getFormulas(), v = range.getValues(), dv = range.getDataValidations();
+    const rules = {};
+    f.forEach((line, r) => {
+      const cells = [];
+      line.forEach((formula, c) => {
+        const a1 = sh.getRange(r + 1, c + 1).getA1Notation();
+        const rule = dv[r][c];
+        if (rule) { const k = rule.getCriteriaType() + ' ' + JSON.stringify(rule.getCriteriaValues().map(x => (x && x.getA1Notation) ? x.getSheet().getName() + '!' + x.getA1Notation() : x)); (rules[k] = rules[k] || []).push(a1); }
+        if (formula) { if (!onlyLinks || /費目管理|96_Drop_Down/.test(formula)) cells.push(a1 + '=' + formula); return; }
+        if (onlyLinks || v[r][c] === '') return;
+        cells.push(a1 + ':' + (typeof v[r][c] === 'number' ? '#' : v[r][c] instanceof Date ? '日付' : typeof v[r][c] === 'boolean' ? v[r][c] : v[r][c]));
+      });
+      if (cells.length) out.push(cells.join(' ¦ '));
+    });
+    Object.keys(rules).forEach(k => out.push('規則 ' + k + ' → ' + rules[k][0] + '…' + rules[k][rules[k].length - 1] + '（' + rules[k].length + 'セル）'));
+    sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(p => out.push('保護 ' + p.getRange().getA1Notation()));
+  };
+  dump('費目管理', 150, false);
+  dump('96_Drop_Down', 4, false);
+  dump('11月', 60, true);
+  const text = out.join('
+').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput('<textarea style="width:100%;height:420px" readonly onclick="this.select()">' + text + '</textarea><p>クリックして全選択し、コピーしてください。</p>').setWidth(760).setHeight(520),
+    '費目管理の構造（' + out.length + '行）');
 }
