@@ -219,6 +219,5 @@ label.check input { width: 24px; height: 24px; accent-color: var(--primary); }
 .savingbar { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
 .savingbar small { display: block; font-weight: 400; }
 .groupname { display: block; font-size: 12px; }
-.secondary.danger { display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: var(--error); }
 .dangerbtn { color: var(--muted, inherit); }
 .dangerbtn.on { color: var(--error); }

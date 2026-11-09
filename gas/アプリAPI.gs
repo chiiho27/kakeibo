@@ -658,8 +658,6 @@ function kkbApiSettingsApply_(ss, op) {
   if (op.type === 'deleteMethod') return kkbApiDeleteMethod_(ss, sh, String(op.name || '').trim());
   const b = KKB_BLOCKS[op.kubun];
   if (!b) return { status: 'error', message: '区分が正しくありません' };
-  if (op.type === 'add') return kkbApiAddItem_(ss, sh, op, b);
-  if (op.type === 'deleteItem') return kkbApiDeleteItem_(ss, sh, op, b);
   const row = Number(op.row);
   if (!(row >= b.first && row <= b.last) || String(sh.getRange(row, b.col).getValue()).trim() !== op.himoku)
     return { status: 'conflict', message: '費目の位置が変わっています。読み直したので、確認してもう一度保存してください' };
@@ -693,24 +691,6 @@ function kkbApiSetHidden_(op) {
   if (!op.to && at >= 0) list.splice(at, 1);
   PropertiesService.getScriptProperties().setProperty('KKB_HIDDEN', JSON.stringify(h));
   return { status: 'done' };
-}
-
-function kkbApiAddItem_(ss, sh, op, b) {
-  const name = String(op.himoku || '').trim(), group = String(op.group || '').trim() || name;
-  if (!name) return { status: 'error', message: '費目名を入力してください' };
-  const v = sh.getRange(b.first, b.col, b.last - b.first + 1, 1).getValues().map(x => String(x[0] || '').trim());
-  if (v.indexOf(name) >= 0) return { status: 'done', repeated: true };
-  const i = v.indexOf('');
-  if (i < 0) return { status: 'error', message: 'この区分の入力欄がいっぱいです' };
-  const row = b.first + i;
-  const write = () => {
-    sh.getRange(row, b.col).setValue(name);
-    sh.getRange(row, b.col + KKB_OFFSET.group).setValue(group);
-    sh.getRange(row, b.col + KKB_OFFSET.order).setValue(Number(op.order) || 999);
-    sh.getRange(row, b.col + KKB_OFFSET.budget).setValue(Number(op.budget) || 0);
-    return { status: 'done' };
-  };
-  return op.kubun === KKB_VAR ? kkbApiKeepPast_(ss, write) : write();
 }
 
 function kkbApiSetGroup_(ss, sh, op, b, row) {
@@ -767,7 +747,7 @@ function kkbApiUnfreeze_(sheet) {
 // 過去の月を固定してから予算を変え、過去の月の数字が1つでも動いたら全部元に戻す。
 function kkbApiKeepPast_(ss, change) {
   const past = kkbApiPastSheets_(ss);
-  // 費目の追加・削除で金額0の行が増減したり行が詰まったりしても、金額が変わらなければ「動いた」としない
+  // スプレッドシートで費目が増減して金額0の行が増減したり行が詰まったりしても、金額が変わらなければ「動いた」としない
   const numbers = s => JSON.stringify([].concat.apply([], s.getDataRange().getValues()).filter(x => typeof x === 'number' && x !== 0).sort((a, b) => a - b));
   const before = past.map(p => numbers(p.sheet));
   const fm = ss.getSheetByName('費目管理');
@@ -805,32 +785,12 @@ function kkbApiUnfreezeAll() {
   ui.alert('解除しました');
 }
 
-// ---- 費目・支払方法の削除 ----
+// ---- 支払方法の削除 ----
 // 明細で使っているものは消さない（過去の集計が外れるため）。
 function kkbApiRawUse_(ss) {
   const raw = requireSheetV3_(ss, KKB_API.RAW_SHEET);
   const n = Math.max(Math.min(raw.getLastRow(), KKB_API.LAST_ROW) - KKB_API.FIRST_ROW + 1, 0);
   return n ? raw.getRange(KKB_API.FIRST_ROW, 4, n, 3).getValues().map(r => ({ kubun: String(r[0]).trim(), himoku: String(r[1]).trim(), method: String(r[2]).trim() })) : [];
-}
-
-function kkbApiDeleteItem_(ss, sh, op, b) {
-  const row = Number(op.row);
-  if (!(row >= b.first && row <= b.last)) return { status: 'error', message: '区分が正しくありません' };
-  const name = String(sh.getRange(row, b.col).getValue()).trim();
-  if (!name) return { status: 'done', repeated: true };
-  if (name !== op.himoku) return { status: 'conflict', message: '費目の位置が変わっています。読み直したので、確認してもう一度押してください' };
-  if (kkbApiRawUse_(ss).some(r => r.kubun === op.kubun && r.himoku === name)) return { status: 'error', message: '明細で使われているため削除できません。使わない場合は「入力の候補から隠す」にしてください' };
-  const range = sh.getRange(row, b.col, 1, KKB_OFFSET.budget + 1);
-  if (range.getFormulas()[0].some(Boolean)) return { status: 'error', message: 'この行には数式があるため削除できません' };
-  const clear = () => {
-    range.clearContent();
-    if (op.kubun === KKB_VAR) sh.getRange(row, KKB_WEEK_COL).setValue(false);
-    return { status: 'done' };
-  };
-  const r = op.kubun === KKB_VAR ? kkbApiKeepPast_(ss, clear) : clear();
-  const still = sh.getRange(b.first, b.col, b.last - b.first + 1, 1).getValues().some(x => String(x[0]).trim() === name);
-  if (r.status === 'done' && !still) kkbApiSetHidden_({ target: 'item', key: op.kubun + '|' + name, to: false });
-  return r;
 }
 
 function kkbApiDeleteMethod_(ss, sh, name) {

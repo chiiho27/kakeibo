@@ -37,7 +37,6 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
   const [confirming, setConfirming] = useState('');
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
-  const [newItem, setNewItem] = useState({ himoku: '', budget: '' });
   const [newMethod, setNewMethod] = useState('');
 
   const load = useCallback(async (keepError = false) => {
@@ -97,10 +96,6 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
           <label className="check"><input type="checkbox" checked={draft.hidden} onChange={e => setDraft({ ...draft, hidden: e.target.checked })} />入力の候補から隠す（過去の明細と集計は残ります）</label>
           <button type="button" className="primary" disabled={busy || !ops.length || !Number.isFinite(Number(draft.budget)) || !Number.isFinite(Number(draft.order))} onClick={() => run(ops, close)}>{busy && <LoaderCircle size={24} strokeWidth={2} className="spin" aria-hidden="true" />}{busy ? '保存中' : '保存する'}</button>
           <button type="button" className="secondary" style={{ width: '100%', marginTop: 8 }} disabled={busy} onClick={close}>戻る</button>
-          <button type="button" className="secondary danger" style={{ width: '100%', marginTop: 8 }} disabled={busy}
-            onClick={() => confirming === 'item' ? run([{ type: 'deleteItem', kubun: edit.kubun, row: edit.row, himoku: edit.himoku }], close) : setConfirming('item')}>
-            <Trash2 size={24} strokeWidth={2} aria-hidden="true" />{confirming === 'item' ? 'もう一度押すと削除します' : 'この費目を削除する'}</button>
-          <p className="hint">明細で使っている費目は削除できません。</p>
         </div>
       ) : data && (
         <>
@@ -115,12 +110,7 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
               </button>
             ))}
           </div>
-          <h2 className="h">費目を追加</h2>
-          <div className="masterform">
-            <input className="input" aria-label="費目名" placeholder="費目名" value={newItem.himoku} onChange={e => setNewItem({ ...newItem, himoku: e.target.value })} />
-            <input className="input num" aria-label="月額予算" inputMode="numeric" placeholder="月額予算" value={newItem.budget} onChange={e => setNewItem({ ...newItem, budget: e.target.value })} />
-            <button type="button" className="secondary" style={{ width: '100%' }} disabled={busy || !newItem.himoku.trim()} onClick={() => run([{ type: 'add', kubun, himoku: newItem.himoku.trim(), budget: Number(newItem.budget) || 0 }], () => setNewItem({ himoku: '', budget: '' }))}>{busy ? '処理中' : '追加する'}</button>
-          </div>
+          <p className="hint">費目の追加・削除は、スプレッドシートの費目管理で行います。</p>
           <h2 className="h">支払方法</h2>
           <div className="list">
             {data.methods.map(m => (
