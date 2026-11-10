@@ -380,14 +380,14 @@ label.check input { accent-color: var(--primary); }
   --blur: blur(22px) saturate(170%);
   --line: rgba(120, 95, 75, .16);
 }
-html { background: #EDE5DC; }
+html { background: #F1E9E1; }
 body { background: transparent; min-height: 100vh; }
 body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background:
-    radial-gradient(60% 40% at 0% 0%, rgba(214, 170, 135, .55), transparent 70%),
+    radial-gradient(60% 40% at 0% 22%, rgba(214, 170, 135, .45), transparent 70%),
     radial-gradient(55% 45% at 100% 35%, rgba(150, 185, 160, .45), transparent 70%),
     radial-gradient(60% 40% at 20% 100%, rgba(217, 160, 54, .22), transparent 70%),
-    linear-gradient(170deg, #F2E8DE 0%, #EDE7E1 50%, #E4E8E1 100%); }
+    linear-gradient(180deg, #F1E9E1 0%, #EDE7E1 50%, #E4E8E1 100%); }
 .app { padding-left: 16px; padding-right: 16px; padding-bottom: calc(112px + env(safe-area-inset-bottom)); }
 
 /* 面 */
@@ -448,17 +448,8 @@ body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-even
   .card, .card.raised, .list, .nav, .sheet, .sheet.entry, .busybox { background: #FAF7F4; -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 
-/* ---- 見出しをなくし、上の端まで背景を続ける ---- */
+/* ---- 見出しをなくす。上端（時計・電池の部分）は背景の一番上と同じ色にして、境目を出さない ---- */
 .topbar { justify-content: flex-end; min-height: 36px; }
-@media (display-mode: standalone) {
-  /* 時計や電池の表示（白い文字）が読めるよう、画面の一番上だけ少し濃くする */
-  body::before { background:
-    linear-gradient(180deg, rgba(122, 86, 60, .5) 0, rgba(122, 86, 60, 0) calc(env(safe-area-inset-top) + 40px)),
-    radial-gradient(60% 40% at 0% 0%, rgba(214, 170, 135, .55), transparent 70%),
-    radial-gradient(55% 45% at 100% 35%, rgba(150, 185, 160, .45), transparent 70%),
-    radial-gradient(60% 40% at 20% 100%, rgba(217, 160, 54, .22), transparent 70%),
-    linear-gradient(170deg, #F2E8DE 0%, #EDE7E1 50%, #E4E8E1 100%); }
-}
 
 /* ---- 下のメニュー：選んでいる画面に白いガラスの粒を置く ---- */
 .nav button { position: relative; }
