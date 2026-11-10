@@ -1,11 +1,11 @@
-/* グレージュのニューモーフィズム（利用者の決定 2026/11/10）。カードとボタンは影で浮かせ、選んだものはへこませる。
+/* グレージュのニューモーフィズム（利用者の決定 2026/11/10）。影は一番大事なカードとボタンだけにし、ほかは線と余白で区切る。
    余白は 8px の倍数。押せる範囲は高さ48px以上。 */
 :root {
-  --bg: #ECE7E2;          /* グレージュ。カードも同じ色で、影で浮かせる */
-  --page: #ECE7E2;
+  --bg: #EFEBE7;          /* グレージュ。浮かせるのは大事なカードとボタンだけ */
+  --page: #EFEBE7;
   --hi: #FFFFFF;
-  --sh: #CFC6BD;
-  --raise: 6px 6px 14px var(--sh), -6px -6px 14px var(--hi);
+  --sh: #D6CDC4;
+  --raise: 8px 8px 20px var(--sh), -8px -8px 20px var(--hi);
   --raise-s: 3px 3px 7px var(--sh), -3px -3px 7px var(--hi);
   --sink: inset 3px 3px 6px var(--sh), inset -3px -3px 6px var(--hi);
   --sink-s: inset 2px 2px 4px var(--sh), inset -2px -2px 4px var(--hi);
@@ -366,3 +366,17 @@ label.check input { accent-color: var(--primary); }
   @keyframes fade { from { opacity: 0; } }
   @keyframes pop { from { transform: scale(.3); opacity: 0; } }
 }
+
+/* ---- 影を減らして余白を広く ---- */
+.app { padding-left: 20px; padding-right: 20px; }
+.card, .list { box-shadow: none; }
+.card { background: none; border-radius: 0; padding: 24px 0 0; margin: 24px 0 0; border-top: 1px solid var(--line); }
+.card.raised { background: var(--bg); border: 0; border-radius: 24px; padding: 20px; margin-top: 16px; box-shadow: var(--raise); }
+.card.raised + .card, .stepper + .card:not(.raised), .seg + .card { border-top: 0; }
+.list { background: none; border-radius: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.sheet .card:not(.raised) { background: none; }
+.meter, .weekitems .meter { box-shadow: none; background: var(--light); }
+.meter i { left: 0; top: 0; bottom: 0; }
+.nav { box-shadow: none; border-top: 1px solid var(--line); }
+.nav button.add span { box-shadow: 0 4px 10px rgba(138, 90, 60, .3); }
+.toast { box-shadow: 0 6px 16px rgba(46, 38, 34, .2); }

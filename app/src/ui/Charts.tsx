@@ -29,7 +29,7 @@ export function Meter({ pct, tone = 'ok', tick, wait = 0, label }: { pct: number
   const p = Math.max(0, Math.min(pct, 1));
   return (
     <div className="meter" role="img" aria-label={label}>
-      {p > 0 && <i className={tone} style={{ width: `calc(${p * 100}% - 4px)`, ...delay(wait) }} />}
+      {p > 0 && <i className={tone} style={{ width: `${p * 100}%`, ...delay(wait) }} />}
       {tick !== undefined && <b className="tick" style={{ left: `${Math.max(0, Math.min(tick, 1)) * 100}%` }} />}
     </div>
   );

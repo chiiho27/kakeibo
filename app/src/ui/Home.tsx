@@ -42,7 +42,7 @@ export function Home({ app }: { app: AppState }) {
 
   return (
     <div className="home">
-      <section className="section card area-week" aria-labelledby="h-week">
+      <section className="section card raised area-week" aria-labelledby="h-week">
         <div className="row"><h2 id="h-week">今週の残予算</h2><span className="muted num">{slash(w.week.days[0]).slice(5)}〜{slash(w.week.days[w.week.days.length - 1]).slice(5)}</span></div>
         {!hasData ? <p className="muted">スプレッドシートの取得前です</p>
           : !w.hasWeeklyItems ? <p className="muted">週管理の費目が設定されていません</p> : (

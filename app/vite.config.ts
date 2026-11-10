@@ -19,8 +19,8 @@ export default defineConfig({
         start_url: '/kakeibo/v3/',
         scope: '/kakeibo/v3/',
         display: 'standalone',
-        background_color: '#ECE7E2',
-        theme_color: '#ECE7E2',
+        background_color: '#EFEBE7',
+        theme_color: '#EFEBE7',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },

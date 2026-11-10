@@ -28,7 +28,7 @@ function Stepper({ label, prev, next }: { label: string; prev?: () => void; next
 
 function Summary({ title, t }: { title: string; t: { income: number; expense: number; saving: number; balance: number } }) {
   return (
-    <section className="section card">
+    <section className="section card raised">
       <h2>{title}</h2>
       <div className={`big num ${t.balance < 0 ? 'over' : ''}`}><CountUp value={t.balance} format={signed} /></div>
       <div className="row muted num"><span>収入 {yen(t.income)}</span><span>支出 {yen(t.expense)}</span><span>貯蓄 {yen(t.saving)}</span></div>
@@ -103,7 +103,7 @@ function Special({ app }: { app: AppState }) {
   if (!s) return <p className="muted section">未設定です。スプレッドシートと同期すると表示されます。</p>;
   return (
     <div className="report">
-      <section className="section card">
+      <section className="section card raised">
         <h2>今使える確保残高</h2>
         <div className="big num">{s.balance == null ? '未設定' : <CountUp value={s.balance} />}</div>
         {s.planned != null && s.actual != null && s.planned > 0 && (
