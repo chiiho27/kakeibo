@@ -116,6 +116,9 @@ export function useApp() {
   }, [conn]);
 
   const pair = useCallback(async (url: string, code: string) => {
+    // 別のスプレッドシートへつなぎ直すとき、前の接続先宛ての未送信があれば止める（新しい接続先に送られてしまうため）
+    if (conn.mode === 'sheet' && conn.url && conn.url !== url && ops.length > 0)
+      return `前の接続先への未送信が ${ops.length}件あります。先に「今すぐ同期」で送るか、未送信の一覧から削除してから接続してください`;
     try {
       const device = await new SheetApi(url, '').pair(code, navigator.userAgent.includes('iPhone') ? 'iPhone' : 'PC');
       await saveConn({ mode: 'sheet', url, device });
@@ -126,7 +129,7 @@ export function useApp() {
       return code === 'pair_wrong' ? '接続コードが違います' : code === 'pair_expired' ? '接続コードの期限が切れています。スプレッドシートで発行し直してください'
         : code === 'network' ? '接続できませんでした。URLと通信状態を確認してください' : '接続できませんでした';
     }
-  }, [saveConn]);
+  }, [saveConn, conn, ops]);
 
   return { ready, conn, prefs, snap, ops, lastSync, syncing, notice, setNotice, online, api,
     sync, saveOp, applyEdit, removeOp, savePrefs, saveConn, pair };
