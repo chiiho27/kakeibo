@@ -34,6 +34,7 @@ function onOpen() {
     .addItem('接続中の端末を確認', 'kkbApiListDevices')
     .addItem('すべての端末の接続を解除', 'kkbApiRevokeAll')
     .addItem('費目管理の構造を書き出す（読み取りのみ）', 'kkbApiInspectMaster')
+    .addItem('重さを診断する（読み取りのみ）', 'kkbApiInspectWeight')
     .addItem('月シートの予算の固定を解除', 'kkbApiUnfreezeAll')
     .addToUi();
 }
@@ -752,3 +753,59 @@ function kkbApiUnfreezeAll() {
   ui.alert('解除しました');
 }
 
+
+// ---- 重さの診断（読み取りのみ） ----
+// 値は読まない。シートごとの大きさ・数式の数・同じ形の数式・重い関数・条件付き書式・入力規則を数える。
+// 数式の中の文字列（費目名など）は「"…"」に伏せて書き出す。
+function kkbApiInspectWeight() {
+  const ss = SpreadsheetApp.getActive();
+  const NL = String.fromCharCode(10);
+  const HEAVY = ['INDIRECT', 'OFFSET', 'TODAY', 'NOW', 'RAND', 'IMPORTRANGE', 'QUERY', 'ARRAYFORMULA', 'FILTER', 'SORT', 'UNIQUE',
+    'SUMPRODUCT', 'COUNTIFS', 'COUNTIF', 'SUMIFS', 'SUMIF', 'VLOOKUP', 'XLOOKUP', 'MATCH', 'REGEXMATCH', 'TEXTJOIN', 'LAMBDA', 'MAP', 'BYROW'];
+  const mask = f => f.replace(/"(?:[^"]|"")*"/g, '"…"');
+  const out = [];
+  let allCells = 0, allFormulas = 0;
+  out.push('# 重さの診断 ' + Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy/MM/dd HH:mm'));
+  out.push('再計算の設定: ' + ss.getRecalculationInterval());
+  const rows = [];
+  ss.getSheets().forEach(sh => {
+    const maxR = sh.getMaxRows(), maxC = sh.getMaxColumns(), lastR = sh.getLastRow(), lastC = sh.getLastColumn();
+    allCells += maxR * maxC;
+    let formulas = 0, wholeCol = 0;
+    const heavy = {}, shapes = {};
+    if (lastR && lastC) {
+      sh.getRange(1, 1, lastR, lastC).getFormulasR1C1().forEach(line => line.forEach(f => {
+        if (!f) return;
+        formulas++;
+        const up = f.toUpperCase();
+        HEAVY.forEach(h => { if (new RegExp('\\b' + h + '\\(').test(up)) heavy[h] = (heavy[h] || 0) + 1; });
+        if (/C\d*:C\d*(?![\dR])|R\d*:R\d*(?![\dC])/.test(f) || /!?C\[?-?\d*\]?:C\[?-?\d*\]?(?!R)/.test(f)) wholeCol++;
+        const k = mask(f);
+        shapes[k] = (shapes[k] || 0) + 1;
+      }));
+    }
+    allFormulas += formulas;
+    const cf = sh.getConditionalFormatRules();
+    let dv = 0;
+    try { if (lastR && lastC) sh.getRange(1, 1, lastR, lastC).getDataValidations().forEach(l => l.forEach(x => { if (x) dv++; })); } catch (e) { dv = -1; }
+    rows.push({ name: sh.getName(), maxR, maxC, lastR, lastC, formulas, wholeCol, heavy, shapes, cf: cf.length,
+      cfRanges: cf.reduce((s, r) => s + r.getRanges().reduce((t, g) => t + g.getNumRows() * g.getNumColumns(), 0), 0),
+      dv, charts: sh.getCharts().length, hidden: sh.isSheetHidden() });
+  });
+  out.push('シート数: ' + rows.length + ' ／ 全セル数（空の行・列を含む）: ' + allCells + ' ／ 数式の数: ' + allFormulas);
+  out.push('');
+  rows.sort((a, b) => b.formulas - a.formulas).forEach(r => {
+    out.push('## ' + r.name + (r.hidden ? '（非表示）' : ''));
+    out.push('大きさ ' + r.maxR + '行×' + r.maxC + '列（使用 ' + r.lastR + '行×' + r.lastC + '列）／数式 ' + r.formulas +
+      '／列全体の参照を含む数式 ' + r.wholeCol + '／条件付き書式 ' + r.cf + '件（' + r.cfRanges + 'セル）／入力規則 ' + r.dv + 'セル／グラフ ' + r.charts);
+    const h = Object.keys(r.heavy).sort((a, b) => r.heavy[b] - r.heavy[a]).map(k => k + ' ' + r.heavy[k]);
+    if (h.length) out.push('関数: ' + h.join('、'));
+    Object.keys(r.shapes).sort((a, b) => r.shapes[b] - r.shapes[a]).slice(0, 4).forEach(k => {
+      out.push('  ×' + r.shapes[k] + '  ' + (k.length > 300 ? k.slice(0, 300) + '…' : k));
+    });
+  });
+  const text = out.join(NL).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput('<textarea style="width:100%;height:420px" readonly onclick="this.select()">' + text + '</textarea><p>クリックして全選択し、コピーしてください。</p>').setWidth(760).setHeight(520),
+    '重さの診断（読み取りのみ）');
+}
