@@ -1,4 +1,4 @@
-/* グレージュのニューモーフィズム（利用者の決定 2026/11/10）。影は一番大事なカードとボタンだけにし、ほかは線と余白で区切る。
+/* グレージュ。全体はリキッドグラス（利用者の決定 2026/11/10）：淡いグラデーションの背景に半透明のガラスの面を重ねる。
    余白は 8px の倍数。押せる範囲は高さ48px以上。 */
 :root {
   --bg: #EFEBE7;          /* グレージュ。浮かせるのは大事なカードとボタンだけ */
@@ -367,16 +367,83 @@ label.check input { accent-color: var(--primary); }
   @keyframes pop { from { transform: scale(.3); opacity: 0; } }
 }
 
-/* ---- 影を減らして余白を広く ---- */
-.app { padding-left: 20px; padding-right: 20px; }
-.card, .list { box-shadow: none; }
-.card { background: none; border-radius: 0; padding: 24px 0 0; margin: 24px 0 0; border-top: 1px solid var(--line); }
-.card.raised { background: var(--bg); border: 0; border-radius: 24px; padding: 20px; margin-top: 16px; box-shadow: var(--raise); }
-.card.raised + .card, .stepper + .card:not(.raised), .seg + .card { border-top: 0; }
-.list { background: none; border-radius: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.sheet .card:not(.raised) { background: none; }
-.meter, .weekitems .meter { box-shadow: none; background: var(--light); }
-.meter i { left: 0; top: 0; bottom: 0; }
-.nav { box-shadow: none; border-top: 1px solid var(--line); }
-.nav button.add span { box-shadow: 0 4px 10px rgba(138, 90, 60, .3); }
-.toast { box-shadow: 0 6px 16px rgba(46, 38, 34, .2); }
+/* ---- リキッドグラス（利用者の決定 2026/11/10） ----
+   淡いグラデーションの背景に、半透明のガラスの面を重ねる。縁を明るくして、上辺に光の筋を入れる。
+   「透明度を下げる」がオンのときは、透けない面に切り替える。 */
+:root {
+  --muted: #5E5149;
+  --glass: rgba(255, 255, 255, .42);
+  --glass-strong: rgba(255, 255, 255, .7);
+  --glass-edge: rgba(255, 255, 255, .7);
+  --glass-shine: inset 0 1px 0 rgba(255, 255, 255, .9), inset 0 -1px 0 rgba(80, 55, 30, .04);
+  --glass-drop: 0 8px 24px rgba(80, 55, 30, .10);
+  --blur: blur(22px) saturate(170%);
+  --line: rgba(120, 95, 75, .16);
+}
+html { background: #EDE5DC; }
+body { background: transparent; min-height: 100vh; }
+body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(60% 40% at 0% 0%, rgba(214, 170, 135, .55), transparent 70%),
+    radial-gradient(55% 45% at 100% 35%, rgba(150, 185, 160, .45), transparent 70%),
+    radial-gradient(60% 40% at 20% 100%, rgba(217, 160, 54, .22), transparent 70%),
+    linear-gradient(170deg, #F2E8DE 0%, #EDE7E1 50%, #E4E8E1 100%); }
+.app { padding-left: 16px; padding-right: 16px; padding-bottom: calc(112px + env(safe-area-inset-bottom)); }
+
+/* 面 */
+.card, .card.raised, .list { background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 24px;
+  box-shadow: var(--glass-shine), var(--glass-drop); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+.card, .card.raised { padding: 18px; margin: 16px 0 0; }
+.card.raised { background: var(--glass-strong); }
+.card.raised + .card, .stepper + .card:not(.raised), .seg + .card { border-top: 1px solid var(--glass-edge); }
+.list { overflow: hidden; }
+.list > * + * { border-top: 1px solid var(--line); }
+.sheet .card, .sheet .list { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(255, 255, 255, .5); }
+
+/* 入力欄・ボタン */
+.input, .searchbox { background: rgba(255, 255, 255, .55); border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 2px rgba(80, 55, 30, .08); }
+.input:focus, .searchbox:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(138, 90, 60, .18); }
+.secondary, .iconbtn, .chip, .tile, .filters button, .seg button, .tabs button, .keypad button {
+  background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shine), 0 2px 8px rgba(80, 55, 30, .06); }
+.chip[aria-pressed=true], .tile[aria-pressed=true], .filters button[aria-pressed=true], .seg button[aria-pressed=true], .tabs button[aria-pressed=true] {
+  background: rgba(255, 255, 255, .92); border: 1px solid #fff; color: var(--primary); font-weight: 600;
+  box-shadow: inset 0 1px 0 #fff, 0 4px 12px rgba(80, 55, 30, .14); }
+.secondary:active:not(:disabled), .iconbtn:active:not(:disabled), .chip:active, .tile:active, .filters button:active, .seg button:active, .keypad button:active:not(.go) {
+  background: rgba(255, 255, 255, .75); box-shadow: inset 0 1px 3px rgba(80, 55, 30, .12); }
+.iconbtn:disabled { background: transparent; border-color: transparent; box-shadow: none; }
+.keypad { border-top: 1px solid var(--glass-edge); }
+.keypad .op { background: rgba(255, 255, 255, .28); }
+.primary, .keypad .go { background: rgba(138, 90, 60, .9); color: #fff; border: 1px solid rgba(255, 255, 255, .35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 6px 16px rgba(138, 90, 60, .28); }
+.tabs.sub button, .tabs.sub button[aria-pressed=true] { background: none; border: 0; box-shadow: none; }
+.tabs.sub button[aria-pressed=true] { border-bottom: 2px solid var(--primary); border-radius: 0; }
+.chip.ghost { background: transparent; border: 1px dashed rgba(120, 95, 75, .35); box-shadow: none; }
+
+/* グラフの溝 */
+.meter, .weekitems .meter { background: rgba(255, 255, 255, .55); box-shadow: inset 0 1px 2px rgba(80, 55, 30, .08); }
+.donuttrack { stroke: rgba(255, 255, 255, .6); }
+.yrow.now { background: rgba(255, 255, 255, .6); }
+.nmdcell { background: rgba(255, 255, 255, .6); box-shadow: inset 0 1px 0 #fff, 0 2px 6px rgba(80, 55, 30, .1); }
+
+/* シート */
+.overlay { background: rgba(46, 38, 34, .22); }
+.sheet, .sheet.entry { background: rgba(248, 243, 238, .78); border-top: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 #fff, 0 -10px 30px rgba(80, 55, 30, .12); -webkit-backdrop-filter: blur(30px) saturate(170%); backdrop-filter: blur(30px) saturate(170%); }
+.masterstatus { background: transparent; }
+.busybox { background: rgba(255, 255, 255, .75); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shine), 0 12px 32px rgba(80, 55, 30, .18);
+  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+.busyveil { background: rgba(46, 38, 34, .18); }
+
+/* 下のメニュー：浮いたガラスの帯 */
+.nav { left: 12px; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom)); max-width: 560px; margin: 0 auto;
+  padding: 0 8px; border-radius: 32px; background: rgba(255, 255, 255, .55); border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shine), 0 10px 30px rgba(80, 55, 30, .16); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+.nav button { min-height: 60px; }
+.nav button.add span { background: rgba(138, 90, 60, .9); border: 1px solid rgba(255, 255, 255, .4); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), 0 6px 16px rgba(138, 90, 60, .3); }
+.toast { bottom: calc(88px + env(safe-area-inset-bottom)); }
+
+/* 透明度を下げる設定では透けない面にする */
+@media (prefers-reduced-transparency: reduce) {
+  body::before { background: #EDE7E1; }
+  .card, .card.raised, .list, .nav, .sheet, .sheet.entry, .busybox { background: #FAF7F4; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
