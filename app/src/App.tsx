@@ -46,13 +46,27 @@ export function App() {
   // タブを切り替えたら、前の画面のスクロール位置を引き継がず先頭から表示する
   useEffect(() => { window.scrollTo(0, 0); }, [tab]);
 
+  // アプリを閉じて30秒以上たってから開き直したら、ホームから始める。入力途中の内容は下書きとして残る。
+  useEffect(() => {
+    let hiddenAt = 0;
+    const onVisible = () => {
+      if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+      if (hiddenAt && Date.now() - hiddenAt > 30000) {
+        setEntryOpen(false); setEditing(null); setEditRow(null); setSlide(''); setTab('home');
+      }
+      hiddenAt = 0;
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   if (!app.ready) return null;
   const unsent = app.ops.length;
 
   return (
     <div className="app">
       <header className="topbar">
-        <h1>{TABS.find(t => t[0] === tab)![1]}</h1>
+        <h1 className="sr">{TABS.find(t => t[0] === tab)![1]}</h1>
         <div className={`status ${!app.online || app.ops.some(o => o.state === 'failed') ? 'warn' : ''}`} role="status">
           {app.conn.mode === 'demo' && <span className="tag">デモ</span>}
           {!app.online && <><CloudOff size={16} aria-hidden="true" />オフライン</>}
@@ -89,7 +103,7 @@ export function App() {
           ...(i === 2 ? [<button key="add" type="button" className="add" aria-label="入力" onClick={() => { setEditing(null); setEditRow(null); setEntryOpen(true); }}>
             <span><Plus size={24} strokeWidth={2} aria-hidden="true" /></span></button>] : []),
           <button key={t} type="button" aria-current={tab === t ? 'page' : undefined} onClick={() => { setSlide(''); setTab(t); }}>
-            <I size={22} strokeWidth={2} aria-hidden="true" />{label}
+            <span className="navpill" aria-hidden="true" /><I size={22} strokeWidth={tab === t ? 2.4 : 2} aria-hidden="true" /><span className="navlabel">{label}</span>
           </button>,
         ])}
       </nav>

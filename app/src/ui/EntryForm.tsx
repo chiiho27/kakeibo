@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { CalendarDays, ChevronLeft, ChevronRight, CircleAlert, Delete, MoreHorizontal, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CreditCard, Delete, LayoutGrid, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { evaluate, formatExpr, hasOperator, press } from '../lib/calc';
 import { daysInMonth, isValidYmd, parts, slash, today, weekdayMon, ymd } from '../lib/date';
@@ -15,11 +15,15 @@ interface Draft {
 }
 
 const EXPENSE: Kubun[] = ['支出（変動費）', '支出（固定費）', '支出（特別費）'];
-const KINDS: [string, Kubun][] = [['支出', K_VAR], ['収入', K_INC], ['貯蓄・投資', K_SAVE]];
+// 区分は1行にまとめる（以前は「支出／収入／貯蓄」と「変動費／固定費／特別費」の2段）
+const KUBUN_ROW: [string, Kubun][] = [['変動費', K_VAR], ['固定費', '支出（固定費）'], ['特別費', '支出（特別費）'], ['収入', K_INC], ['貯蓄', K_SAVE]];
+const TOP_HIMOKU = 7;
 // G列は1つの「詳細」として扱う。カード明細の店名には「／ｉＤ」のように／を含むものがあるので分割しない。
 const placeOf = (g: string) => g.trim();
 const normPlace = (s: string) => s.normalize('NFKC').trim().toLowerCase();
-const KEYS = ['7', '8', '9', '÷', '4', '5', '6', '×', '1', '2', '3', '−', '0', '00', 'back', '+'];
+// iPhone の電卓と同じ並び（右端が ÷ × − + =、0 は横長）。小数点の位置は 00 にする。
+const KEYS = ['clear', 'back', '00', '÷', '7', '8', '9', '×', '4', '5', '6', '−', '1', '2', '3', '+', '0', '='];
+const KEY_LABEL: Record<string, string> = { clear: '全部消す', back: '1文字消す' };
 
 function CalendarPicker({ value, onPick }: { value: string; onPick: (d: string) => void }) {
   const [v, setV] = useState<[number, number]>(() => { const [y, m] = parts(value); return [y, m]; });
@@ -67,7 +71,7 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
   const [loaded, setLoaded] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [sheet, setSheet] = useState<'date' | 'method' | null>(null);
+  const [sheet, setSheet] = useState<'date' | 'method' | 'himoku' | null>(null);
   const set = (p: Partial<Draft>) => setF(x => ({ ...x, ...p }));
 
   // 開くたびに：修正なら対象の取引、入力途中の下書きがあればそれ、なければ設定の初期値から始める
@@ -124,7 +128,22 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
     snap.rows.forEach(r => r.method && s.add(r.method));
     return [...s].filter(Boolean);
   }, [prefs, snap, items]);
-  const quickMethods = prefs.quickMethods.includes(f.method) || !f.method ? prefs.quickMethods : [f.method, ...prefs.quickMethods.slice(0, 2)];
+  // 支払方法の一覧は、よく使うものを先頭に
+  const methodList = [...new Set([...prefs.quickMethods.filter(m => methods.includes(m)), ...methods])];
+
+  // 費目は、よく使う順に7つだけ出す（並びは表示順のまま）。選んでいる費目は必ず含める。残りは「すべて」から。
+  const uses = useMemo(() => {
+    const n = new Map<string, number>();
+    snap.rows.forEach(r => { if (r.kubun === f.kubun) n.set(r.himoku, (n.get(r.himoku) ?? 0) + 1); });
+    return n;
+  }, [snap.rows, f.kubun]);
+  const topHimoku = (() => {
+    if (himokuList.length <= TOP_HIMOKU + 1) return himokuList;
+    const pick = [...himokuList].sort((a, b) => (uses.get(b) ?? 0) - (uses.get(a) ?? 0)).slice(0, TOP_HIMOKU);
+    if (f.himoku && !pick.includes(f.himoku)) pick[TOP_HIMOKU - 1] = f.himoku;
+    return himokuList.filter(h => pick.includes(h));
+  })();
+  const weekday = '日月火水木金土'[new Date(`${f.date}T00:00:00`).getDay()] ?? '';
 
   const amount = evaluate(f.expr);
   const key = (k: string) => { setErrors(e => ({ ...e, amount: '' })); setF(x => ({ ...x, expr: press(x.expr, k) })); };
@@ -174,6 +193,11 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
   }
 
   const kind = EXPENSE.includes(f.kubun) ? K_VAR : f.kubun;
+  const tile = (h: string, after?: () => void) => {
+    const I = iconFor(h);
+    return <button key={h} type="button" className="tile" aria-pressed={f.himoku === h} onClick={() => { set({ himoku: h, himokuPicked: true }); after?.(); }}>
+      <I size={20} strokeWidth={2} aria-hidden="true" /><span>{displayName(h)}</span></button>;
+  };
   return (
     <Dialog.Root open={open} onOpenChange={o => { if (!o) onClose(); }}>
       <Dialog.Portal>
@@ -182,22 +206,15 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
           <Dialog.Title className="sr">{editing ? '未送信の取引を修正' : editRow ? '取引を修正' : '入力'}</Dialog.Title>
           <div className="entry-scroll">
             <div className="tabrow">
-              <div className="tabs" role="group" aria-label="種類">
-                {KINDS.map(([label, k]) => (
-                  <button key={label} type="button" aria-pressed={kind === k} onClick={() => set({ kubun: k, himoku: defaultHimoku(k), himokuPicked: false })}>{label}</button>
+              <div className="tabs kubunrow" role="group" aria-label="区分">
+                {KUBUN_ROW.map(([label, k]) => (
+                  <button key={k} type="button" aria-pressed={f.kubun === k} aria-label={KUBUN_LABEL[k]} onClick={() => set({ kubun: k, himoku: defaultHimoku(k), himokuPicked: false })}>{label}</button>
                 ))}
               </div>
               <Dialog.Close className="iconbtn" aria-label="閉じる"><X size={20} strokeWidth={2} /></Dialog.Close>
             </div>
             {editing && <p className="hint">未送信の取引を修正中</p>}
             {editRow && <p className="hint">送信済みの取引を修正中</p>}
-            {kind === K_VAR && (
-              <div className="tabs sub" role="group" aria-label="区分">
-                {EXPENSE.map(k => (
-                  <button key={k} type="button" aria-pressed={f.kubun === k} onClick={() => set({ kubun: k, himoku: defaultHimoku(k), himokuPicked: false })}>{KUBUN_LABEL[k]}</button>
-                ))}
-              </div>
-            )}
 
             <div className="amountbox" aria-live="polite">
               {hasOperator(f.expr) && <div className="muted num">{formatExpr(f.expr)}</div>}
@@ -208,31 +225,24 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
             <div className="field" role="group" aria-labelledby="l-himoku">
               <span className="label" id="l-himoku">費目</span>
               <div className="tiles">
-                {himokuList.map(h => {
-                  const I = iconFor(h);
-                  return <button key={h} type="button" className="tile" aria-pressed={f.himoku === h} onClick={() => set({ himoku: h, himokuPicked: true })}>
-                    <I size={20} strokeWidth={2} aria-hidden="true" /><span>{displayName(h)}</span></button>;
-                })}
+                {topHimoku.map(h => tile(h))}
+                {topHimoku.length < himokuList.length && (
+                  <button type="button" className="tile more" onClick={() => setSheet('himoku')}><LayoutGrid size={20} strokeWidth={2} aria-hidden="true" /><span>すべて</span></button>
+                )}
               </div>
               {canGuess && !f.himokuPicked && f.himoku === guess!.himoku && <p className="hint">利用履歴から推測</p>}
               {errors.himoku && <p className="err"><CircleAlert size={16} />{errors.himoku}</p>}
             </div>
 
-            <div className="line">
-              <span className="label">日付</span>
-              <button type="button" className="input datebtn num" onClick={() => setSheet('date')} aria-label={`日付 ${slash(f.date)}。カレンダーを開く`}>
-                {slash(f.date)}<CalendarDays size={20} strokeWidth={2} aria-hidden="true" />
+            <div className="pickrow">
+              <button type="button" className="input pickbtn num" onClick={() => setSheet('date')} aria-label={`日付 ${slash(f.date)}。カレンダーを開く`}>
+                <CalendarDays size={20} strokeWidth={2} aria-hidden="true" /><span>{f.date === today() ? '今日' : slash(f.date).slice(5)}（{weekday}）</span>
+              </button>
+              <button type="button" className="input pickbtn" onClick={() => setSheet('method')} aria-label={`支払方法 ${f.method || '未選択'}。選び直す`}>
+                <CreditCard size={20} strokeWidth={2} aria-hidden="true" /><span className="ellipsis">{f.method || '支払方法'}</span><ChevronDown size={16} strokeWidth={2} aria-hidden="true" />
               </button>
             </div>
             {errors.date && <p className="err"><CircleAlert size={16} />{errors.date}</p>}
-
-            <div className="line" role="group" aria-labelledby="l-method">
-              <span className="label" id="l-method">支払方法</span>
-              <div className="chips">
-                {quickMethods.map(m => <button key={m} type="button" className="chip" aria-pressed={f.method === m} onClick={() => set({ method: m })}>{m}</button>)}
-                <button type="button" className="chip" onClick={() => setSheet('method')}><MoreHorizontal size={20} strokeWidth={2} aria-hidden="true" />その他</button>
-              </div>
-            </div>
             {errors.method && <p className="err"><CircleAlert size={16} />{errors.method}</p>}
 
             <div className="line">
@@ -259,14 +269,15 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
           {errors.submit && <p className="err submit-err" role="alert"><CircleAlert size={16} aria-hidden="true" />{errors.submit}</p>}
           <div className="keypad" role="group" aria-label="電卓">
             {KEYS.map(k => (
-              <button key={k} type="button" className={'+−×÷'.includes(k) ? 'op' : ''} aria-label={k === 'back' ? '1文字消す' : k} onClick={() => key(k)}>
-                {k === 'back' ? <Delete size={20} strokeWidth={2} aria-hidden="true" /> : k}
+              <button key={k} type="button" className={'+−×÷='.includes(k) ? 'op' : k === 'clear' || k === 'back' || k === '00' ? 'fn' : k === '0' ? 'zero' : ''}
+                aria-label={KEY_LABEL[k] ?? k} onClick={() => key(k)}>
+                {k === 'back' ? <Delete size={20} strokeWidth={2} aria-hidden="true" /> : k === 'clear' ? 'C' : k}
               </button>
             ))}
-            <button type="button" className="op" aria-label="全部消す" onClick={() => key('clear')}>C</button>
-            <button type="button" className="op" onClick={() => key('=')}>=</button>
+          </div>
+          <div className="saverow">
             {editRow ? <button type="button" className="del" disabled={saving} onClick={remove}>削除</button>
-              : editing ? <span /> : <button type="button" className="next" disabled={saving} onClick={() => save('continue')}>続けて</button>}
+              : editing ? null : <button type="button" className="next" disabled={saving} onClick={() => save('continue')}>続けて入力</button>}
             <button type="button" className="go" disabled={saving} onClick={() => save('close')}>{saving && editRow ? '送信中' : editing || editRow ? '保存' : '登録'}</button>
           </div>
 
@@ -274,7 +285,10 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
             <CalendarPicker value={f.date} onPick={d => { set({ date: d }); setSheet(null); }} />
           </Sheet>
           <Sheet open={sheet === 'method'} onOpenChange={o => setSheet(o ? 'method' : null)} title="支払方法">
-            <PickList items={methods} selected={f.method} onPick={m => { set({ method: m }); setSheet(null); }} />
+            <PickList items={methodList} selected={f.method} onPick={m => { set({ method: m }); setSheet(null); }} />
+          </Sheet>
+          <Sheet open={sheet === 'himoku'} onOpenChange={o => setSheet(o ? 'himoku' : null)} title="費目">
+            <div className="tiles">{himokuList.map(h => tile(h, () => setSheet(null)))}</div>
           </Sheet>
         </Dialog.Content>
       </Dialog.Portal>

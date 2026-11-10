@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { displayName, yen } from '../lib/display';
 import { CHART_EXPENSE, CHART_INCOME, type Slice } from '../lib/report';
 
@@ -37,6 +37,7 @@ export function Meter({ pct, tone = 'ok', tick, wait = 0, label }: { pct: number
 
 /** 内訳の円グラフ。項目ごとに順番に描く。金額は凡例にすべて書く */
 export function Donut({ slices, title }: { slices: Slice[]; title: string }) {
+  const sheen = useId().replace(/:/g, '');
   const total = slices.reduce((s, x) => s + x.amount, 0);
   if (!total) return <p className="hint">{title}はまだありません</p>;
   const size = 132, stroke = 18, r = (size - stroke) / 2, c = 2 * Math.PI * r, gap = slices.length > 1 ? 2 : 0;
@@ -45,6 +46,12 @@ export function Donut({ slices, title }: { slices: Slice[]; title: string }) {
     <div className="donut">
       <div className="donutchart">
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${title}の円グラフ。合計 ${yen(total)}`}>
+          <defs>
+            {/* ガラスのつや：上から光が当たったように、輪の上側を白く透かす */}
+            <linearGradient id={`${sheen}-s`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#fff" stopOpacity=".28" /><stop offset=".35" stopColor="#fff" stopOpacity=".05" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
+            </linearGradient>
+          </defs>
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" className="donuttrack" strokeWidth={stroke} />
           {slices.map((s, i) => {
             const len = (s.amount / total) * c, offset = at;
@@ -52,6 +59,8 @@ export function Donut({ slices, title }: { slices: Slice[]; title: string }) {
             return <circle key={s.name} className="dseg" style={delay(0.15 + i * 0.12)} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={s.color} strokeWidth={stroke}
               strokeDasharray={`${Math.max(len - gap, 1)} ${c}`} strokeDashoffset={-offset} transform={`rotate(-90 ${size / 2} ${size / 2})`} />;
           })}
+          <circle className="dsheen" cx={size / 2} cy={size / 2} r={r} fill="none" stroke={`url(#${sheen}-s)`} strokeWidth={stroke} />
+          <circle cx={size / 2} cy={size / 2} r={r + stroke / 2 - 0.5} fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="1" />
         </svg>
         <span className="donuttotal num"><small>合計</small><CountUp value={total} /></span>
       </div>
@@ -76,8 +85,8 @@ export function YearBars({ months, now }: { months: { ym: string; income: number
           <div key={m.ym} className={`yrow ${m.ym === now ? 'now' : ''}`}>
             <small className="num">{Number(m.ym.slice(5))}月</small>
             <div className="ybar">
-              <i style={{ width: w(m.income), background: CHART_INCOME, ...delay(0.1 + i * 0.05) }} />
-              <i style={{ width: w(m.expense), background: CHART_EXPENSE, ...delay(0.13 + i * 0.05) }} />
+              <i style={{ width: w(m.income), backgroundColor: CHART_INCOME, ...delay(0.1 + i * 0.05) }} />
+              <i style={{ width: w(m.expense), backgroundColor: CHART_EXPENSE, ...delay(0.13 + i * 0.05) }} />
             </div>
           </div>
         ))}
