@@ -39,13 +39,13 @@ describe('グラフとペース', () => {
   const master = { items: [], methods: [] };
   it('月が変わっても同じ項目は同じ色', () => {
     const list = [e('2026-10-01', 900, 'A'), e('2026-10-02', 500, 'B'), e('2026-11-01', 100, 'B')];
-    expect(expenseSlices(master, list, '2026-11', K)).toEqual([{ name: 'B', amount: 100, color: '#E0883A' }]);
+    expect(expenseSlices(master, list, '2026-11', K)).toEqual([{ name: 'B', amount: 100, color: '#2E8A68' }]);
   });
-  it('8項目目以降はその他にまとめる', () => {
+  it('5項目目以降はその他にまとめる', () => {
     const list = Array.from({ length: 9 }, (_, i) => e('2026-11-01', 100 - i, 'X' + i));
     const s = expenseSlices(master, list, '2026-11', K);
-    expect(s).toHaveLength(8);
-    expect(s[7]).toMatchObject({ name: 'その他', amount: 92 + 93 });
+    expect(s).toHaveLength(5);
+    expect(s[4]).toMatchObject({ name: 'その他', amount: 96 + 95 + 94 + 93 + 92 });
   });
   it('週の目安との差', () => {
     const days = ['d1', 'd2', 'd3', 'd4'];

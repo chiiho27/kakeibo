@@ -1,4 +1,4 @@
-import { Check, CircleAlert, RefreshCw } from 'lucide-react';
+import { Check, CircleAlert, FileUp, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { slash } from '../lib/date';
 import { demoApi } from '../lib/demo';
@@ -6,7 +6,8 @@ import { displayName, iconFor, KUBUN_LABEL, yen } from '../lib/display';
 import type { AppState } from '../lib/store';
 import { KUBUN, type Op } from '../lib/types';
 import { NmdMark } from './Home';
-import { BusyVeil } from './Sheet';
+import { BusyVeil, Sheet } from './Sheet';
+import { Csv } from './Csv';
 import { MasterEdit } from './MasterEdit';
 
 const NMD_ICONS = ['lucide:sprout', 'lucide:leaf', 'lucide:star', 'lucide:smile', 'lucide:circle-check', 'lucide:heart'];
@@ -14,6 +15,7 @@ const STATE_LABEL: Record<Op['state'], string> = { pending: '未送信', unknown
 
 export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => void }) {
   const [editing, setEditing] = useState(false);
+  const [csv, setCsv] = useState(false);
   const { conn, prefs, snap, ops } = app;
   const [url, setUrl] = useState(conn.url);
   const [code, setCode] = useState('');
@@ -82,6 +84,10 @@ export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => v
           ))}
         </div>
       )}
+
+      <h2 className="h">CSV取込</h2>
+      <button type="button" className="secondary" style={{ width: '100%' }} onClick={() => setCsv(true)}><FileUp size={20} strokeWidth={2} aria-hidden="true" />カード明細のCSVを取り込む</button>
+      <Sheet open={csv} onOpenChange={setCsv} title="CSV取込"><Csv app={app} /></Sheet>
 
       <h2 className="h">接続</h2>
       <div className="list">

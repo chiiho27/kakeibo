@@ -58,14 +58,14 @@ export function monthGroups(master: Master, list: Entry[], ym: string, kubun: st
 }
 
 // グラフの色。色覚の違いでも隣同士を見分けられることを確認済み。文字の色には使わない。
-export const CHART_COLORS = ['#16895F', '#E0883A', '#3F7FC4', '#C2527F', '#7A5FC0', '#9A9A2E', '#2BA6A6'];
-export const CHART_OTHER = '#A9B2AD';
-export const CHART_INCOME = '#16895F';
-export const CHART_EXPENSE = '#E0883A';
+export const CHART_COLORS = ['#A85A32', '#2E8A68', '#D9A036', '#4D74B5'];
+export const CHART_OTHER = '#B9AFA6';
+export const CHART_INCOME = '#2E8A68';
+export const CHART_EXPENSE = '#A85A32';
 
 export interface Slice { name: string; amount: number; color: string }
 
-/** 円グラフの内訳。色は全期間の支出の多い順で決め、月を変えても同じ項目は同じ色にする。8項目目以降は「その他」。 */
+/** 円グラフの内訳。色は全期間の支出の多い順で決め、月を変えても同じ項目は同じ色にする。5項目目以降は「その他」。 */
 export function expenseSlices(master: Master, list: Entry[], ym: string, kubun: string): Slice[] {
   const groupOf = (h: string) => master.items.find(i => i.kubun === kubun && i.himoku === h)?.group ?? h;
   const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);

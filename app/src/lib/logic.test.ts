@@ -126,3 +126,18 @@ describe('同期', () => {
     expect(api.rows.length).toBe(before + 1);
   });
 });
+
+import { weekItems } from './budget';
+describe('週の費目別', () => {
+  it('費目ごとの週予算と使った金額', () => {
+    const master = { methods: [], items: [
+      { kubun: '支出（変動費）', himoku: '食費', budget: 30000, weekly: true, order: 1, note: '', methods: [], group: '食費' },
+      { kubun: '支出（変動費）', himoku: '娯楽', budget: 9000, weekly: false, order: 2, note: '', methods: [], group: '娯楽' },
+    ] };
+    const list = [{ date: '2026-11-10', amount: 1200, kubun: '支出（変動費）', himoku: '食費' }, { date: '2026-11-01', amount: 500, kubun: '支出（変動費）', himoku: '食費' }];
+    const [it, ...rest] = weekItems(master, list, '2026-11-10');
+    expect(rest).toHaveLength(0);
+    expect(it.spent).toBe(1200);
+    expect(Math.round(it.budget)).toBe(7000);
+  });
+});

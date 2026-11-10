@@ -36,6 +36,20 @@ export function weekStatus(master: Master, rows: SheetRow[], unsent: NewTx[], da
   };
 }
 
+/** 週管理の費目ごとの、今週の予算（月予算 × 週の日数 ÷ 月の日数）と使った金額。list には未送信分も含める。 */
+export function weekItems(master: Master, list: Entry[], day = todayOf()) {
+  const week = weekOf(day);
+  const [y, m] = parts(day);
+  const byName = new Map<string, { himoku: string; budget: number; spent: number; order: number }>();
+  master.items.filter(i => i.kubun === K_VAR && i.weekly).forEach(i => {
+    const it = byName.get(i.himoku) ?? { himoku: i.himoku, budget: 0, spent: 0, order: i.order };
+    it.budget += i.budget * week.days.length / daysInMonth(y, m);
+    byName.set(i.himoku, it);
+  });
+  list.filter(e => e.kubun === K_VAR && week.days.includes(e.date)).forEach(e => { const it = byName.get(e.himoku); if (it) it.spent += e.amount; });
+  return [...byName.values()].sort((a, b) => a.order - b.order);
+}
+
 export interface MonthTotals { income: number; expense: number; saving: number; balance: number }
 
 /** 月別シートの「記録ベース収支」と同じ：収入 − 支出（特別費を含む）。積立（先取り貯金・投資）は差し引かず別に示す。 */
