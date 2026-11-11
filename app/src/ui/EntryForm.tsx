@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { CalendarDays, ChevronDown, ClipboardPaste, ChevronLeft, ChevronRight, CircleAlert, CreditCard, Delete, LayoutGrid, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CreditCard, Delete, LayoutGrid, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { evaluate, formatExpr, hasOperator, press } from '../lib/calc';
 import { daysInMonth, isValidYmd, parts, slash, today, weekdayMon, ymd } from '../lib/date';
@@ -154,10 +154,6 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
     setErrors(e => ({ ...e, amount: '' }));
     set({ expr: String(Math.round(Number(m[0]))) });
   };
-  async function pasteFromClipboard() {
-    try { pasteAmount(await navigator.clipboard.readText()); }
-    catch { setErrors(e => ({ ...e, amount: '貼り付けできませんでした。もう一度押して「ペースト」を選んでください' })); }
-  }
 
   async function save(next: 'close' | 'continue') {
     if (saving) return;
@@ -229,9 +225,16 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
             {editRow && <p className="hint">送信済みの取引を修正中</p>}
 
             <div className="amountbox" aria-live="polite">
-              <button type="button" className="pastebtn" onClick={pasteFromClipboard}><ClipboardPaste size={18} strokeWidth={2} aria-hidden="true" />貼り付け</button>
               {hasOperator(f.expr) && <div className="muted num">{formatExpr(f.expr)}</div>}
-              <div className={`big num ${f.expr ? '' : 'placeholder'}`}><span className="sr">金額 </span>{amount === null ? '—' : yen(amount)}</div>
+              {/* 長押しで「ペースト」が出るよう入力欄にする。キーボードは出さず、入力は電卓で行う */}
+              <input className={`big num amountinput ${f.expr ? '' : 'placeholder'}`} aria-label="金額" inputMode="none" autoComplete="off"
+                value={amount === null ? '—' : yen(amount)} onChange={() => { /* 電卓と貼り付けだけで変える */ }}
+                onPaste={e => { e.preventDefault(); e.stopPropagation(); pasteAmount(e.clipboardData.getData('text')); e.currentTarget.blur(); }}
+                onKeyDown={e => {
+                  const map: Record<string, string> = { '+': '+', '-': '−', '*': '×', '/': '÷', Backspace: 'back', Delete: 'clear', '=': '=' };
+                  const k = /^\d$/.test(e.key) ? e.key : map[e.key];
+                  if (k) { e.preventDefault(); key(k); } else if (!e.metaKey && !e.ctrlKey && e.key.length === 1) e.preventDefault();
+                }} />
               {errors.amount && <p className="err"><CircleAlert size={16} />{errors.amount}</p>}
             </div>
 
