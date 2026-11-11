@@ -35,6 +35,7 @@ function onOpen() {
     .addItem('すべての端末の接続を解除', 'kkbApiRevokeAll')
     .addItem('費目管理の構造を書き出す（読み取りのみ）', 'kkbApiInspectMaster')
     .addItem('重さを診断する（読み取りのみ）', 'kkbApiInspectWeight')
+    .addItem('月シートの数式を書き出す（読み取りのみ）', 'kkbApiInspectMonth')
     .addItem('月シートの予算の固定を解除', 'kkbApiUnfreezeAll')
     .addSeparator()
     .addItem('照合済みのカード明細を値に固定（軽くする）', 'kkbApiFreezeCardMatch')
@@ -889,3 +890,40 @@ function kkbApiUnfreezeCardMatch() {
   } finally { lock.releaseLock(); }
 }
 
+
+// ---- 月シートの数式を書き出す（読み取りのみ） ----
+// 月シートの集計を軽くする準備。4月シートの数式を形ごとに1つずつ、伏せずに書き出す。
+// あわせて 01_Raw_Data・96_Drop_Down の見出しと数式を書き出す。値（明細）は読まない。
+function kkbApiInspectMonth() {
+  const ss = SpreadsheetApp.getActive(), NL = String.fromCharCode(10), out = [];
+  const shapes = (name, rows) => {
+    const sh = ss.getSheetByName(name);
+    if (!sh) { out.push('## ' + name + '：なし'); return; }
+    const r = Math.min(sh.getLastRow(), rows || sh.getLastRow()), c = sh.getLastColumn();
+    out.push('## ' + name + '（使用 ' + sh.getLastRow() + '行×' + c + '列）');
+    const range = sh.getRange(1, 1, r, c), f1 = range.getFormulasR1C1(), fa = range.getFormulas();
+    const seen = {};
+    f1.forEach((line, y) => line.forEach((f, x) => {
+      if (!f) return;
+      const a1 = sh.getRange(y + 1, x + 1).getA1Notation();
+      if (!seen[f]) seen[f] = { first: a1, last: a1, n: 0, a: fa[y][x] };
+      seen[f].n++; seen[f].last = a1;
+    }));
+    Object.keys(seen).forEach(k => out.push('[' + seen[k].first + '…' + seen[k].last + ' ×' + seen[k].n + '] ' + seen[k].a));
+  };
+  const heads = (name, rows) => {
+    const sh = ss.getSheetByName(name);
+    if (!sh) return;
+    const v = sh.getRange(1, 1, rows, sh.getLastColumn()).getValues();
+    v.forEach((line, y) => out.push(name + ' ' + (y + 1) + '行目: ' + line.map((x, i) => x === '' ? '' : sh.getRange(y + 1, i + 1).getA1Notation() + '=' + (x instanceof Date ? '日付' : x)).filter(Boolean).join(' ¦ ')));
+  };
+  shapes('4月');
+  heads('01_Raw_Data', 4);
+  shapes('01_Raw_Data', 6);
+  heads('96_Drop_Down', 1);
+  shapes('96_Drop_Down');
+  const text = out.join(NL).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput('<textarea style="width:100%;height:420px" readonly onclick="this.select()">' + text + '</textarea><p>クリックして全選択し、コピーしてください。</p>').setWidth(760).setHeight(520),
+    '月シートの数式（読み取りのみ）');
+}
