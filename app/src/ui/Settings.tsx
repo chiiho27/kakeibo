@@ -12,6 +12,12 @@ import { MasterEdit } from './MasterEdit';
 
 const NMD_ICONS = ['lucide:sprout', 'lucide:leaf', 'lucide:star', 'lucide:smile', 'lucide:circle-check', 'lucide:heart'];
 const STATE_LABEL: Record<Op['state'], string> = { pending: '未送信', unknown: '送信確認中', failed: '受付不可' };
+// スプレッドシートが断った理由を日本語で示す
+const reasonText = (e?: string) => !e ? '理由が分かりません'
+  : e === 'conflict' ? '理由：取得したときからスプレッドシートの行が変わっていたか、同じ内容の行が見つかりませんでした'
+  : e === 'full' ? '理由：01_Raw_Data に空きの行がありません'
+  : ['日付', '金額', '区分', '費目', '支払方法', '取引ID'].includes(e) ? `理由：${e}を確認してください`
+  : `理由：${e}`;
 
 export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => void }) {
   const [editing, setEditing] = useState(false);
@@ -74,7 +80,8 @@ export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => v
               <div className="grow">
                 <div>{slash(o.tx.date)}　{displayName(o.tx.himoku)}　<span className="num">{yen(o.tx.amount)}</span></div>
                 <div className="muted">{o.tx.method}{o.tx.place ? '・' + o.tx.place : ''}・<span className="tag">{o.type === 'update' ? '修正・' : o.type === 'delete' ? '削除・' : ''}{STATE_LABEL[o.state]}</span>
-                  {o.error ? `（${o.error}）` : ''}</div>
+                  </div>
+                {o.state === 'failed' && <div className="err">{reasonText(o.error)}</div>}
               </div>
               {o.state !== 'unknown' && <>
                 {o.type === 'add' && <button type="button" className="secondary" onClick={() => onEdit(o)}>修正</button>}

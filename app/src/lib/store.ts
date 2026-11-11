@@ -13,7 +13,7 @@ export function syncMessage(r: SyncResult, unsent: number): Notice | null {
   if (r.error === 'skipped') return null;
   if (r.error === 'unauthorized') return { text: '接続が解除されています。設定で接続コードを入力してください', kind: 'error' };
   if (r.error) return { text: `同期できませんでした・未送信 ${unsent}件`, kind: 'error', retry: true };
-  if (r.failed) return { text: `スプレッドシートが受け付けなかった取引があります（${r.failed}件）`, kind: 'error' };
+  if (r.failed) return { text: `スプレッドシートが受け付けなかった取引があります（${r.failed}件）。設定の「未送信」で理由を確認できます`, kind: 'error' };
   if (r.sent) return { text: 'スプレッドシートに保存しました', kind: 'info' };
   return null;
 }
