@@ -39,7 +39,6 @@ function onOpen() {
     .addSeparator()
     .addItem('照合済みのカード明細を値に固定（軽くする）', 'kkbApiFreezeCardMatch')
     .addItem('カード明細の照合の固定を解除', 'kkbApiUnfreezeCardMatch')
-    .addItem('控えのシートを別ファイルに移す（軽くする）', 'kkbApiMoveBackups')
     .addToUi();
 }
 
@@ -890,37 +889,3 @@ function kkbApiUnfreezeCardMatch() {
   } finally { lock.releaseLock(); }
 }
 
-// ---- 軽くする：控えのシートを別ファイルに移す ----
-// 名前が「_改修前」「01_Raw_Data_backup_」で始まる非表示のシートを、新しいスプレッドシートへコピーし、
-// 中身が同じことを確かめてから、元のファイルから削除する。新しいファイルは自分だけが見られる状態で作られる。
-function kkbApiBackupSheets_(ss) {
-  return ss.getSheets().filter(s => s.isSheetHidden() && /^(_改修前|01_Raw_Data_backup_)/.test(s.getName()));
-}
-
-function kkbApiMoveBackups() {
-  const ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive(), NL = String.fromCharCode(10);
-  const list = kkbApiBackupSheets_(ss);
-  if (!list.length) { ui.alert('移す控えのシートはありません'); return; }
-  if (ui.alert('控えのシートを別ファイルに移しますか？',
-    list.length + '枚のシートを新しいスプレッドシートにコピーし、中身が同じことを確かめてから、このファイルから削除します。' + NL + NL +
-    list.map(s => s.getName()).join(NL), ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
-  const name = ss.getName() + '_控え_' + Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd');
-  const dest = SpreadsheetApp.create(name);
-  const blank = dest.getSheets()[0];
-  const same = (a, b) => {
-    const ra = a.getLastRow(), ca = a.getLastColumn();
-    if (ra !== b.getLastRow() || ca !== b.getLastColumn()) return false;
-    if (!ra || !ca) return true;
-    return JSON.stringify(a.getRange(1, 1, ra, ca).getValues()) === JSON.stringify(b.getRange(1, 1, ra, ca).getValues());
-  };
-  const moved = [], kept = [];
-  list.forEach(s => {
-    const copy = s.copyTo(dest);
-    copy.setName(s.getName());
-    if (same(s, copy)) moved.push(s); else kept.push(s.getName());
-  });
-  dest.deleteSheet(blank);
-  moved.forEach(s => ss.deleteSheet(s));
-  ui.alert('移しました：' + moved.length + '枚' + NL + '移した先：' + name + NL + dest.getUrl() +
-    (kept.length ? NL + NL + '中身が一致しなかったため、残したシート：' + NL + kept.join(NL) : ''));
-}
