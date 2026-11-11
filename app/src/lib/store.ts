@@ -86,25 +86,35 @@ export function useApp() {
     sync();
   }, [sync]);
 
-  /** 送信済み取引の修正（tx あり）・削除（tx なし）。戻り値は画面に出すエラー文、成功なら空文字。 */
+  /** 送信済み取引の修正（tx あり）・削除（tx なし）。端末に保存してすぐ戻り、送信は後ろで行う。戻り値は画面に出すエラー文、成功なら空文字。 */
   const applyEdit = useCallback(async (opId: string, row: SheetRow, tx: NewTx | null): Promise<string> => {
-    if (!api) return 'スプレッドシートに未接続です';
-    try {
-      const r = await api.edit({ opId, type: tx ? 'update' : 'delete', target: { id: row.id, hash: row.hash, row: row.row }, ...(tx ? { tx } : {}) });
-      if (r.status === 'done') {
-        await sync();
-        setNotice({ text: tx ? 'スプレッドシートを更新しました' : 'スプレッドシートから削除しました', kind: 'info' });
-        return '';
-      }
-      if (r.error === 'conflict') { await sync(); return 'スプレッドシート側で変更されています。最新の内容を取得したので、開き直して確認してください'; }
-      return `スプレッドシートが受け付けませんでした（${r.message || r.error}）`;
-    } catch (e) {
-      const code = e instanceof ApiError ? e.code : 'network';
-      return code === 'busy' ? 'スプレッドシートが処理中です。少し待ってからもう一度押してください'
-        : code === 'unauthorized' ? '接続が解除されています。設定で接続コードを入力してください'
-        : '通信できませんでした。もう一度押してください';
-    }
-  }, [api, sync]);
+    const prev = (await listOps()).find(o => o.type !== 'add' && o.target?.id === row.id);
+    if (prev?.state === 'unknown') return '前の修正を送信確認中です。同期が終わってから、もう一度修正してください';
+    if (prev) await deleteOp(prev.opId);
+    const shown: NewTx = { id: row.id, date: row.date, amount: row.amount, kubun: row.kubun as NewTx['kubun'], himoku: row.himoku, method: row.method, place: row.g, detail: '', sat: row.sat };
+    // まだ送っていない修正を直したときは、元の取得内容（ハッシュ）を対象のまま使う
+    const target = prev?.state === 'pending' && prev.target ? prev.target : { id: row.id, hash: row.hash, row: row.row };
+    await putOp({ opId, type: tx ? 'update' : 'delete', tx: tx ?? shown, target, state: 'pending', createdAt: Date.now() });
+    setOps(await listOps());
+    setNotice({ text: tx ? '修正を端末に保存しました。スプレッドシートへ送っています' : '削除を端末に保存しました。スプレッドシートへ送っています', kind: 'info' });
+    sync();
+    return '';
+  }, [sync]);
+
+  // 未送信の修正・削除を、取得した明細に重ねて見せる（送信が終わるまで画面の数字が古いままにならないように）
+  const view = useMemo(() => {
+    const edits = ops.filter(o => o.type !== 'add');
+    if (!edits.length) return snap;
+    const rows = snap.rows.flatMap(r => {
+      const e = edits.filter(o => o.target?.id === r.id).pop();
+      if (!e) return [r];
+      if (e.type === 'delete') return e.state === 'failed' ? [{ ...r, pending: e.state }] : [];
+      const t = e.tx;
+      return [{ ...r, date: t.date, amount: t.amount, kubun: t.kubun, himoku: t.himoku, method: t.method,
+        g: [t.place, t.detail].filter(Boolean).join('／'), sat: t.sat || 'ー', pending: e.state }];
+    });
+    return { ...snap, rows };
+  }, [snap, ops]);
 
   const removeOp = useCallback(async (opId: string) => { await deleteOp(opId); setOps(await listOps()); }, []);
 
@@ -131,7 +141,7 @@ export function useApp() {
     }
   }, [saveConn, conn, ops]);
 
-  return { ready, conn, prefs, snap, ops, lastSync, syncing, notice, setNotice, online, api,
+  return { ready, conn, prefs, snap: view, ops, lastSync, syncing, notice, setNotice, online, api,
     sync, saveOp, applyEdit, removeOp, savePrefs, saveConn, pair };
 }
 export type AppState = ReturnType<typeof useApp>;

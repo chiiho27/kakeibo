@@ -20,9 +20,10 @@ export interface SheetRow {
   source: string;
   row?: number;
   hash?: string;       // B〜I 列の内容ハッシュ。修正・削除の競合検知に使う
+  pending?: 'pending' | 'unknown' | 'failed'; // 端末の修正がまだスプレッドシートに届いていない
 }
 
-/** 送信済み取引の修正・削除（オンライン時のみ。キューには入れない） */
+/** 送信済み取引の修正・削除（スプレッドシートへ送る形） */
 export interface EditOp {
   opId: string;
   type: 'update' | 'delete';
@@ -51,8 +52,9 @@ export interface NewTx {
  */
 export interface Op {
   opId: string;
-  type: 'add';
-  tx: NewTx;
+  type: 'add' | 'update' | 'delete';
+  tx: NewTx;                // add・update は送る内容。delete は消す取引の内容（表示用）
+  target?: { id: string; hash?: string; row?: number }; // update・delete の対象（取得したときの内容ハッシュで競合を検知）
   state: 'pending' | 'unknown' | 'failed';
   createdAt: number;
   error?: string;

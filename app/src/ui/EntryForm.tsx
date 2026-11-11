@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CreditCard, Delete, LayoutGrid, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, ClipboardPaste, ChevronLeft, ChevronRight, CircleAlert, CreditCard, Delete, LayoutGrid, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { evaluate, formatExpr, hasOperator, press } from '../lib/calc';
 import { daysInMonth, isValidYmd, parts, slash, today, weekdayMon, ymd } from '../lib/date';
@@ -21,8 +21,8 @@ const TOP_HIMOKU = 7;
 // G列は1つの「詳細」として扱う。カード明細の店名には「／ｉＤ」のように／を含むものがあるので分割しない。
 const placeOf = (g: string) => g.trim();
 const normPlace = (s: string) => s.normalize('NFKC').trim().toLowerCase();
-// iPhone の電卓と同じ並び（右端が ÷ × − + =、0 は横長）。小数点の位置は 00 にする。
-const KEYS = ['clear', 'back', '00', '÷', '7', '8', '9', '×', '4', '5', '6', '−', '1', '2', '3', '+', '0', '='];
+// 数字を大きく押しやすく。右端は ⌫ − + =（÷ × は使う場面が少ないので外した。キーボードからは入力できる）
+const KEYS = ['7', '8', '9', 'back', '4', '5', '6', '−', '1', '2', '3', '+', 'clear', '0', '00', '='];
 const KEY_LABEL: Record<string, string> = { clear: '全部消す', back: '1文字消す' };
 
 function CalendarPicker({ value, onPick }: { value: string; onPick: (d: string) => void }) {
@@ -147,6 +147,17 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
 
   const amount = evaluate(f.expr);
   const key = (k: string) => { setErrors(e => ({ ...e, amount: '' })); setF(x => ({ ...x, expr: press(x.expr, k) })); };
+  // ほかのアプリでコピーした金額（「¥1,280」「1280円」など）を貼り付ける
+  const pasteAmount = (text: string) => {
+    const m = text.normalize('NFKC').replace(/[¥\\,\s円]/g, '').match(/\d+(\.\d+)?/);
+    if (!m) { setErrors(e => ({ ...e, amount: '貼り付けた内容に金額が見つかりません' })); return; }
+    setErrors(e => ({ ...e, amount: '' }));
+    set({ expr: String(Math.round(Number(m[0]))) });
+  };
+  async function pasteFromClipboard() {
+    try { pasteAmount(await navigator.clipboard.readText()); }
+    catch { setErrors(e => ({ ...e, amount: '貼り付けできませんでした。もう一度押して「ペースト」を選んでください' })); }
+  }
 
   async function save(next: 'close' | 'continue') {
     if (saving) return;
@@ -202,7 +213,8 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
     <Dialog.Root open={open} onOpenChange={o => { if (!o) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="overlay" />
-        <Dialog.Content className="sheet entry" aria-describedby={undefined} onKeyDown={onKey}>
+        <Dialog.Content className="sheet entry" aria-describedby={undefined} onKeyDown={onKey}
+          onPaste={e => { if ((e.target as HTMLElement).tagName === 'INPUT') return; e.preventDefault(); pasteAmount(e.clipboardData.getData('text')); }}>
           <Dialog.Title className="sr">{editing ? '未送信の取引を修正' : editRow ? '取引を修正' : '入力'}</Dialog.Title>
           <div className="entry-scroll">
             <div className="tabrow">
@@ -217,6 +229,7 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
             {editRow && <p className="hint">送信済みの取引を修正中</p>}
 
             <div className="amountbox" aria-live="polite">
+              <button type="button" className="pastebtn" onClick={pasteFromClipboard}><ClipboardPaste size={18} strokeWidth={2} aria-hidden="true" />貼り付け</button>
               {hasOperator(f.expr) && <div className="muted num">{formatExpr(f.expr)}</div>}
               <div className={`big num ${f.expr ? '' : 'placeholder'}`}><span className="sr">金額 </span>{amount === null ? '—' : yen(amount)}</div>
               {errors.amount && <p className="err"><CircleAlert size={16} />{errors.amount}</p>}
@@ -269,7 +282,7 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
           {errors.submit && <p className="err submit-err" role="alert"><CircleAlert size={16} aria-hidden="true" />{errors.submit}</p>}
           <div className="keypad" role="group" aria-label="電卓">
             {KEYS.map(k => (
-              <button key={k} type="button" className={'+−×÷='.includes(k) ? 'op' : k === 'clear' || k === 'back' || k === '00' ? 'fn' : k === '0' ? 'zero' : ''}
+              <button key={k} type="button" className={'+−='.includes(k) ? 'op' : k === 'clear' || k === 'back' ? 'fn' : ''}
                 aria-label={KEY_LABEL[k] ?? k} onClick={() => key(k)}>
                 {k === 'back' ? <Delete size={20} strokeWidth={2} aria-hidden="true" /> : k === 'clear' ? 'C' : k}
               </button>
@@ -278,7 +291,7 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
           <div className="saverow">
             {editRow ? <button type="button" className="del" disabled={saving} onClick={remove}>削除</button>
               : editing ? null : <button type="button" className="next" disabled={saving} onClick={() => save('continue')}>続けて入力</button>}
-            <button type="button" className="go" disabled={saving} onClick={() => save('close')}>{saving && editRow ? '送信中' : editing || editRow ? '保存' : '登録'}</button>
+            <button type="button" className="go" disabled={saving} onClick={() => save('close')}>{editing || editRow ? '保存' : '登録'}</button>
           </div>
 
           <Sheet open={sheet === 'date'} onOpenChange={o => setSheet(o ? 'date' : null)} title="日付">

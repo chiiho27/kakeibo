@@ -501,3 +501,11 @@ body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-even
 .saverow .del { background: var(--glass); border: 1px solid var(--glass-edge); color: var(--error); box-shadow: var(--glass-shine); }
 .saverow .go { background: rgba(138, 90, 60, .92); color: #fff; border: 1px solid rgba(255, 255, 255, .35);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 6px 16px rgba(138, 90, 60, .28); }
+
+/* ---- 入力：大きな電卓と貼り付け ---- */
+.keypad button { min-height: 54px; font-size: 26px; }
+.keypad .op { font-size: 28px; }
+.keypad .fn { font-size: 20px; }
+.amountbox { align-items: center; }
+.pastebtn { margin-right: auto; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 12px; border-radius: 18px;
+  font-size: 13px; color: var(--primary); background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shine); }

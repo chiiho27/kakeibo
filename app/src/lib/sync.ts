@@ -39,7 +39,7 @@ export async function syncNow(api: Api): Promise<SyncResult> {
       await setMeta('snapshot', snapshot);
       await setMeta('lastSync', res.serverTime);
       const ids = new Set(res.rows.map(r => r.id));
-      for (const op of await listOps()) if (ids.has(op.tx.id)) { await deleteOp(op.opId); if (op.state !== 'pending') result.sent++; }
+      for (const op of await listOps()) if (op.type === 'add' && ids.has(op.tx.id)) { await deleteOp(op.opId); if (op.state !== 'pending') result.sent++; }
       result.pulled = true;
     } catch (e) {
       result.error ||= e instanceof ApiError ? e.code : 'network';

@@ -88,6 +88,12 @@ export class DemoApi implements Api {
   }
 
   async push(ops: Op[]): Promise<PushResult[]> {
+    const out: PushResult[] = [];
+    for (const op of ops) out.push(op.type === 'add' ? (await this.pushAdd([op]))[0] : await this.edit(op as unknown as EditOp));
+    return out;
+  }
+
+  private async pushAdd(ops: Op[]): Promise<PushResult[]> {
     await this.net();
     const results = ops.map(op => {
       const seen = this.ledger.get(op.opId);

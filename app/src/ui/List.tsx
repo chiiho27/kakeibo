@@ -23,7 +23,7 @@ export function List({ app, onEditRow, onEditOp }: { app: AppState; onEditRow: (
     const ids = new Set(snap.rows.map(r => r.id));
     return [
       ...snap.rows.map(r => ({ key: r.id, date: r.date, amount: r.amount, kubun: r.kubun, himoku: r.himoku, method: r.method, g: r.g, sat: r.sat, row: r })),
-      ...ops.filter(o => !ids.has(o.tx.id)).map(o => ({ key: o.opId, date: o.tx.date, amount: o.tx.amount, kubun: o.tx.kubun, himoku: o.tx.himoku, method: o.tx.method,
+      ...ops.filter(o => o.type === 'add' && !ids.has(o.tx.id)).map(o => ({ key: o.opId, date: o.tx.date, amount: o.tx.amount, kubun: o.tx.kubun, himoku: o.tx.himoku, method: o.tx.method,
         g: [o.tx.place, o.tx.detail].filter(Boolean).join('／'), sat: o.tx.sat, op: o })),
     ];
   }, [snap.rows, ops]);
@@ -40,7 +40,7 @@ export function List({ app, onEditRow, onEditOp }: { app: AppState; onEditRow: (
 
   function open(i: Item) {
     if (i.op) { if (i.op.state === 'unknown') app.setNotice({ text: '送信の確認中です。同期が終わるまでお待ちください', kind: 'info' }); else onEditOp(i.op); return; }
-    if (!app.online) { app.setNotice({ text: '送信済みの取引の修正はオンライン時にできます', kind: 'error' }); return; }
+    if (i.row?.pending === 'unknown') { app.setNotice({ text: '修正の送信を確認中です。同期が終わるまでお待ちください', kind: 'info' }); return; }
     if (i.amount <= 0) { app.setNotice({ text: '返金など0円以下の取引は、スプレッドシートで修正してください', kind: 'error' }); return; }
     onEditRow(i.row!);
   }
@@ -75,7 +75,7 @@ export function List({ app, onEditRow, onEditOp }: { app: AppState; onEditRow: (
                 <button key={i.key} type="button" className="li pick txrow" onClick={() => open(i)}>
                   <I size={20} strokeWidth={2} aria-hidden="true" />
                   <span className="grow">
-                    <span className="txname">{displayName(i.himoku)}{i.op && <span className="tag">{STATE[i.op.state]}</span>}</span>
+                    <span className="txname">{displayName(i.himoku)}{i.op && <span className="tag">{STATE[i.op.state]}</span>}{i.row?.pending && <span className="tag">{i.row.pending === 'failed' ? '受付不可' : i.row.pending === 'unknown' ? '送信確認中' : '修正待ち'}</span>}</span>
                     <span className="muted txsub">{[KUBUN_LABEL[i.kubun] ?? i.kubun, i.method, i.g].filter(Boolean).join('・')}</span>
                   </span>
                   <span className="txamt num">{i.kubun === K_INC ? '+' : ''}{yen(i.amount)}{i.sat && i.sat !== 'ー' && <span className="muted">{i.sat}</span>}</span>

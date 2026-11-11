@@ -6,7 +6,7 @@ type Entry = { date: string; amount: number; kubun: string; himoku: string };
 /** 未送信のうち、スプレッドシートの取得結果にまだ現れていないものだけを返す（二重計上を防ぐ） */
 export function unsentTxs(ops: Op[], rows: SheetRow[]): NewTx[] {
   const ids = new Set(rows.map(r => r.id));
-  return ops.filter(o => !ids.has(o.tx.id)).map(o => o.tx);
+  return ops.filter(o => o.type === 'add' && !ids.has(o.tx.id)).map(o => o.tx);
 }
 
 const sum = (list: Entry[]) => list.reduce((s, e) => s + e.amount, 0);

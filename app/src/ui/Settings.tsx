@@ -73,11 +73,11 @@ export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => v
             <div className="li" key={o.opId}>
               <div className="grow">
                 <div>{slash(o.tx.date)}　{displayName(o.tx.himoku)}　<span className="num">{yen(o.tx.amount)}</span></div>
-                <div className="muted">{o.tx.method}{o.tx.place ? '・' + o.tx.place : ''}・<span className="tag">{STATE_LABEL[o.state]}</span>
+                <div className="muted">{o.tx.method}{o.tx.place ? '・' + o.tx.place : ''}・<span className="tag">{o.type === 'update' ? '修正・' : o.type === 'delete' ? '削除・' : ''}{STATE_LABEL[o.state]}</span>
                   {o.error ? `（${o.error}）` : ''}</div>
               </div>
               {o.state !== 'unknown' && <>
-                <button type="button" className="secondary" onClick={() => onEdit(o)}>修正</button>
+                {o.type === 'add' && <button type="button" className="secondary" onClick={() => onEdit(o)}>修正</button>}
                 <button type="button" className="secondary danger" onClick={() => confirm('この未送信の取引を取り消しますか？') && app.removeOp(o.opId)}>取消</button>
               </>}
             </div>
