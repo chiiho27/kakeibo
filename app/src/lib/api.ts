@@ -84,7 +84,8 @@ export class SheetApi implements Api {
     return (await this.call({ action: 'pull' })) as unknown as PullResult;
   }
   async push(ops: Op[]) {
-    const data = await this.call({ action: 'push', ops: ops.map(o => ({ opId: o.opId, type: o.type, tx: o.tx })) });
+    // 修正・削除は、対象の行（取得したときの行番号と内容の目印）も送る。これがないとスプレッドシートは行を特定できない。
+    const data = await this.call({ action: 'push', ops: ops.map(o => ({ opId: o.opId, type: o.type, tx: o.tx, ...(o.target ? { target: o.target } : {}) })) });
     return data.results as PushResult[];
   }
   async csvRead(files: { name: string; base64: string }[]) {

@@ -85,6 +85,7 @@ export function Settings({ app, onEdit }: { app: AppState; onEdit: (op: Op) => v
               </div>
               {o.state !== 'unknown' && <>
                 {o.type === 'add' && <button type="button" className="secondary" onClick={() => onEdit(o)}>修正</button>}
+                {o.state === 'failed' && o.type !== 'add' && <button type="button" className="secondary" onClick={() => app.retryOp(o.opId)}>送り直す</button>}
                 <button type="button" className="secondary danger" onClick={() => confirm('この未送信の取引を取り消しますか？') && app.removeOp(o.opId)}>取消</button>
               </>}
             </div>

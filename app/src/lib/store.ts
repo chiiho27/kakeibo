@@ -118,6 +118,15 @@ export function useApp() {
 
   const removeOp = useCallback(async (opId: string) => { await deleteOp(opId); setOps(await listOps()); }, []);
 
+  /** 受け付けられなかった操作を、同じ内容のまま送り直す（同じ操作IDなので二重にはならない） */
+  const retryOp = useCallback(async (opId: string) => {
+    const op = (await listOps()).find(o => o.opId === opId);
+    if (!op) return;
+    await putOp({ ...op, state: 'pending', error: undefined });
+    setOps(await listOps());
+    sync();
+  }, [sync]);
+
   const savePrefs = useCallback(async (p: Prefs) => { setPrefs(p); await setMeta('prefs', p); }, []);
 
   const saveConn = useCallback(async (c: Connection) => {
@@ -142,6 +151,6 @@ export function useApp() {
   }, [saveConn, conn, ops]);
 
   return { ready, conn, prefs, snap: view, ops, lastSync, syncing, notice, setNotice, online, api,
-    sync, saveOp, applyEdit, removeOp, savePrefs, saveConn, pair };
+    sync, saveOp, applyEdit, removeOp, retryOp, savePrefs, saveConn, pair };
 }
 export type AppState = ReturnType<typeof useApp>;
