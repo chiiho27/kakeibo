@@ -40,6 +40,8 @@ function onOpen() {
     .addSeparator()
     .addItem('照合済みのカード明細を値に固定（軽くする）', 'kkbApiFreezeCardMatch')
     .addItem('カード明細の照合の固定を解除', 'kkbApiUnfreezeCardMatch')
+    .addItem('月シートの集計を軽くする', 'kkbApiLightenMonths')
+    .addItem('月シートの集計を元に戻す', 'kkbApiRestoreMonths')
     .addToUi();
 }
 
@@ -926,4 +928,114 @@ function kkbApiInspectMonth() {
   SpreadsheetApp.getUi().showModalDialog(
     HtmlService.createHtmlOutput('<textarea style="width:100%;height:420px" readonly onclick="this.select()">' + text + '</textarea><p>クリックして全選択し、コピーしてください。</p>').setWidth(760).setHeight(520),
     '月シートの数式（読み取りのみ）');
+}
+
+// ---- 軽くする：月シートの集計 ----
+// 各月の実績は「区分の費目を 96_Drop_Down から探し、費目ごとに 01_Raw_Data 全体を集計して足す」数式で、
+// 01_Raw_Data が変わるたびに12か月分が計算し直されて重い。01_Raw_Data の空き列（AE）に月別表示名を1つの数式で出し、
+// 月シートはその列で1回だけ集計する形に置き換える。置き換えの前後で月シート・年間推移・特別費管理の値を全部比べ、
+// 1つでも違えば元に戻す。元の数式は控え、メニューで戻せる。
+const KKB_LITE = {
+  PROP: 'KKB_MONTH_LITE',
+  COL: 'AE', HEAD: '月別表示名（集計用）',
+  GROUP: "=ARRAYFORMULA(IF($B$5:$B$4986=\"\",\"\",IFERROR(VLOOKUP($D$5:$D$4986&\"|\"&$E$5:$E$4986,{'96_Drop_Down'!$G$2:$G$200&\"|\"&'96_Drop_Down'!$H$2:$H$200,'96_Drop_Down'!$N$2:$N$200},2,FALSE),\"\")))",
+  // 範囲, 見出しの列, 区分。sum は金額、methods は特別費の支払方法
+  RANGES: [
+    ['D7:D16', 'B', '収入', 'sum'], ['H7:H16', 'F', '先取り貯金・投資', 'sum'],
+    ['D23:D43', 'B', '支出（固定費）', 'sum'], ['H23:H43', 'F', '支出（変動費）', 'sum'],
+    ['D48:D65', 'B', '支出（特別費）', 'sum'], ['C48:C65', 'B', '支出（特別費）', 'methods'],
+  ],
+};
+
+function kkbApiLiteFormula_(spec, row) {
+  const [, col, kubun, kind] = spec, label = col + row;
+  const R = "'01_Raw_Data'!", ym = 'TEXT($J$3,"yyyy-mm")';
+  if (kind === 'sum') return '=IF(' + label + '="","",IFERROR(SUMIFS(' + R + '$C$5:$C$4986,' + R + '$J$5:$J$4986,' + ym + ',' + R + '$D$5:$D$4986,"' + kubun + '",' + R + '$AE$5:$AE$4986,' + label + '),0))';
+  return '=IF(' + label + '="","",IFERROR(TEXTJOIN("・",TRUE,UNIQUE(FILTER(' + R + '$F$5:$F$4986,' + R + '$J$5:$J$4986=' + ym + ',' + R + '$D$5:$D$4986="' + kubun + '",' + R + '$AE$5:$AE$4986=' + label + ',' + R + '$F$5:$F$4986<>""))),""))';
+}
+
+function kkbApiLiteSheets_(ss) {
+  return ss.getSheets().filter(s => /^\d{1,2}月$/.test(s.getName()));
+}
+
+function kkbApiLiteSnapshot_(ss) {
+  const names = kkbApiLiteSheets_(ss).map(s => s.getName()).concat(['年間推移', '特別費管理']);
+  const snap = {};
+  names.forEach(n => { const s = ss.getSheetByName(n); if (s && s.getLastRow()) snap[n] = s.getRange(1, 1, s.getLastRow(), s.getLastColumn()).getValues(); });
+  return snap;
+}
+
+function kkbApiLiteDiff_(a, b) {
+  const out = [];
+  Object.keys(a).forEach(n => a[n].forEach((line, y) => line.forEach((v, x) => {
+    const w = b[n] && b[n][y] ? b[n][y][x] : undefined;
+    const same = v instanceof Date && w instanceof Date ? v.getTime() === w.getTime() : typeof v === 'number' && typeof w === 'number' ? Math.abs(v - w) < 1e-6 : v === w;
+    if (!same && out.length < 15) { let c = '', k = x + 1; while (k) { c = String.fromCharCode(65 + (k - 1) % 26) + c; k = Math.floor((k - 1) / 26); } out.push(n + '!' + c + (y + 1)); }
+  })));
+  return out;
+}
+
+function kkbApiLightenMonths() {
+  const ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive(), NL = String.fromCharCode(10);
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty(KKB_LITE.PROP)) { ui.alert('すでに置き換え済みです'); return; }
+  if (ui.alert('月シートの集計を軽くしますか？',
+    '01_Raw_Data の AE列に月別表示名を出す数式を足し、各月の実績（D・H列）と特別費の支払方法（C48:C65）の数式を、その列を使う形に置き換えます。' + NL +
+    '置き換えの前後で、月シート・年間推移・特別費管理の値を全部比べ、1つでも違えば元に戻します。' + NL +
+    '元の数式は控えておき、メニュー「月シートの集計を元に戻す」で戻せます。1〜2分かかることがあります。', ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) { ui.alert('ほかの処理が動いています。少し待ってからもう一度実行してください'); return; }
+  try {
+    const raw = requireSheetV3_(ss, KKB_API.RAW_SHEET), months = kkbApiLiteSheets_(ss);
+    // 確認1：AE列が空いていること
+    if (raw.getRange('AE1:AE4986').getValues().some(r => r[0] !== '') || raw.getRange('AE1:AE4986').getFormulas().some(r => r[0])) {
+      ui.alert('01_Raw_Data の AE列が空いていないため、中止しました'); return;
+    }
+    // 確認2：置き換える数式が、どの月も同じ形であること
+    const originals = {};
+    for (const spec of KKB_LITE.RANGES) {
+      let base = null;
+      for (const s of months) {
+        const f = s.getRange(spec[0]).getFormulasR1C1().map(r => r[0]);
+        base = base || f[0];
+        if (!base || f.some(x => x !== base) || !/MAP\(|XLOOKUP\(/.test(base)) { ui.alert(s.getName() + ' の ' + spec[0] + ' の数式が想定と違うため、中止しました'); return; }
+      }
+      originals[spec[0]] = base;
+    }
+    const before = kkbApiLiteSnapshot_(ss);
+    raw.getRange(KKB_LITE.COL + '4').setValue(KKB_LITE.HEAD);
+    raw.getRange(KKB_LITE.COL + '5').setFormula(KKB_LITE.GROUP);
+    // 行ごとに見出しのセルが変わるので、1行ずつ数式を作って入れる
+    months.forEach(s => KKB_LITE.RANGES.forEach(spec => {
+      const r = s.getRange(spec[0]), top = r.getRow();
+      r.setFormulas(Array.from({ length: r.getNumRows() }, (_, i) => [kkbApiLiteFormula_(spec, top + i)]));
+    }));
+    SpreadsheetApp.flush();
+    const diff = kkbApiLiteDiff_(before, kkbApiLiteSnapshot_(ss));
+    if (diff.length) {
+      months.forEach(s => KKB_LITE.RANGES.forEach(spec => { const r = s.getRange(spec[0]); r.setFormulasR1C1(Array.from({ length: r.getNumRows() }, () => [originals[spec[0]]])); }));
+      raw.getRange(KKB_LITE.COL + '4:' + KKB_LITE.COL + '5').clearContent();
+      SpreadsheetApp.flush();
+      ui.alert('値が変わる場所があったため、元に戻しました。' + NL + '違った場所（最大15か所）：' + NL + diff.join(NL));
+      return;
+    }
+    props.setProperty(KKB_LITE.PROP, JSON.stringify(originals));
+    ui.alert('置き換えました。月シート・年間推移・特別費管理の値は、置き換え前とすべて同じです。');
+  } finally { lock.releaseLock(); }
+}
+
+function kkbApiRestoreMonths() {
+  const ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive();
+  const props = PropertiesService.getScriptProperties(), saved = props.getProperty(KKB_LITE.PROP);
+  if (!saved) { ui.alert('置き換えていないため、戻すものはありません'); return; }
+  if (ui.alert('月シートの集計を元に戻しますか？', '各月の数式を置き換え前の形に戻し、01_Raw_Data の AE列の数式を消します。計算は重くなります。', ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) { ui.alert('ほかの処理が動いています。少し待ってからもう一度実行してください'); return; }
+  try {
+    const originals = JSON.parse(saved);
+    kkbApiLiteSheets_(ss).forEach(s => Object.keys(originals).forEach(a1 => { const r = s.getRange(a1); r.setFormulasR1C1(Array.from({ length: r.getNumRows() }, () => [originals[a1]])); }));
+    requireSheetV3_(ss, KKB_API.RAW_SHEET).getRange(KKB_LITE.COL + '4:' + KKB_LITE.COL + '5').clearContent();
+    props.deleteProperty(KKB_LITE.PROP);
+    ui.alert('元に戻しました');
+  } finally { lock.releaseLock(); }
 }
