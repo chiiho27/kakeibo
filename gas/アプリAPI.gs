@@ -36,6 +36,10 @@ function onOpen() {
     .addItem('費目管理の構造を書き出す（読み取りのみ）', 'kkbApiInspectMaster')
     .addItem('重さを診断する（読み取りのみ）', 'kkbApiInspectWeight')
     .addItem('月シートの予算の固定を解除', 'kkbApiUnfreezeAll')
+    .addSeparator()
+    .addItem('照合済みのカード明細を値に固定（軽くする）', 'kkbApiFreezeCardMatch')
+    .addItem('カード明細の照合の固定を解除', 'kkbApiUnfreezeCardMatch')
+    .addItem('控えのシートを別ファイルに移す（軽くする）', 'kkbApiMoveBackups')
     .addToUi();
 }
 
@@ -502,6 +506,8 @@ function kkbApiCsvApply_(ss, items) {
     results.push({ importId: x.a.it.importId, status: 'done' });
   });
   SpreadsheetApp.flush();
+  // 照合を値に固定している場合は、取込済になった行も続けて固定する
+  if (PropertiesService.getScriptProperties().getProperty(KKB_CARDJ.FORMULA)) kkbApiCardFreeze_(ss);
   return { ok: true, results: results };
 }
 
@@ -808,4 +814,113 @@ function kkbApiInspectWeight() {
   SpreadsheetApp.getUi().showModalDialog(
     HtmlService.createHtmlOutput('<textarea style="width:100%;height:420px" readonly onclick="this.select()">' + text + '</textarea><p>クリックして全選択し、コピーしてください。</p>').setWidth(760).setHeight(520),
     '重さの診断（読み取りのみ）');
+}
+
+// ---- 軽くする：照合済みのカード明細の J列を値に固定 ----
+// 照合の数式は 01_Raw_Data が変わるたびに全行で計算し直される。結果が変わらない「取込済・対象外・重複除外」の行だけ、
+// 今の結果の値に置き換える。まだ取り込んでいない行（要確認・取込可）は数式のまま残す。元の数式は控えておき、戻せる。
+const KKB_CARDJ = { COL: 10, STATUS: 11, FORMULA: 'KKB_CARDJ_R1C1', ROWS: 'KKB_CARDJ_ROWS' };
+
+function kkbApiCardFrozenRows_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(KKB_CARDJ.ROWS) || '[]'); } catch (e) { return []; }
+}
+
+/** 対象の行を値に固定し、固定した行数を返す。数式が想定と違う行には触らない。 */
+function kkbApiCardFreeze_(ss) {
+  const props = PropertiesService.getScriptProperties();
+  const sheet = requireSheetV3_(ss, KKV3_CARD.IMPORT_SHEET);
+  const first = KKV3_CARD.FIRST_DATA_ROW, n = Math.max(sheet.getLastRow() - first + 1, 0);
+  if (!n) return 0;
+  const formulas = sheet.getRange(first, KKB_CARDJ.COL, n, 1).getFormulasR1C1().map(x => x[0]);
+  const heads = sheet.getRange(first, 1, n, KKB_CARDJ.STATUS).getValues();
+  // 控える数式は、いちばん多く使われている形（全行同じ形のはず）
+  let base = props.getProperty(KKB_CARDJ.FORMULA);
+  if (!base) {
+    const count = {};
+    formulas.forEach(f => { if (f) count[f] = (count[f] || 0) + 1; });
+    base = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+    if (!base) return 0;
+  }
+  const target = [];
+  formulas.forEach((f, i) => {
+    const status = String(heads[i][KKB_CARDJ.STATUS - 1]).trim();
+    if (f === base && heads[i][0] && status && KKB_CSV.PENDING.indexOf(status) < 0) target.push(i);
+  });
+  if (!target.length) return 0;
+  SpreadsheetApp.flush();
+  const values = sheet.getRange(first, KKB_CARDJ.COL, n, 1).getValues();
+  // 続いている行はまとめて書く
+  const runs = [];
+  target.forEach(i => { const last = runs[runs.length - 1]; if (last && last[1] === i - 1) last[1] = i; else runs.push([i, i]); });
+  runs.forEach(([a, b]) => sheet.getRange(first + a, KKB_CARDJ.COL, b - a + 1, 1).setValues(values.slice(a, b + 1)));
+  const rows = kkbApiCardFrozenRows_().concat(runs.map(([a, b]) => [first + a, first + b]));
+  props.setProperty(KKB_CARDJ.FORMULA, base);
+  props.setProperty(KKB_CARDJ.ROWS, JSON.stringify(rows));
+  return target.length;
+}
+
+function kkbApiFreezeCardMatch() {
+  const ui = SpreadsheetApp.getUi();
+  if (ui.alert('照合済みのカード明細を値に固定しますか？',
+    '03_Card_Import の J列（照合・重複判定）のうち、取込済・対象外・重複除外の行を、今の結果の値に置き換えます。' + String.fromCharCode(10) +
+    '要確認・取込可の行は数式のまま残します。元の数式は控えておき、メニュー「カード明細の照合の固定を解除」で戻せます。', ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) { ui.alert('ほかの処理が動いています。少し待ってからもう一度実行してください'); return; }
+  try { ui.alert('固定しました：' + kkbApiCardFreeze_(SpreadsheetApp.getActive()) + '行'); }
+  finally { lock.releaseLock(); }
+}
+
+function kkbApiUnfreezeCardMatch() {
+  const ui = SpreadsheetApp.getUi();
+  if (ui.alert('カード明細の照合の固定を解除しますか？', '値に固定した J列を、元の数式に戻します。計算は重くなります。', ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
+  const props = PropertiesService.getScriptProperties(), base = props.getProperty(KKB_CARDJ.FORMULA);
+  if (!base) { ui.alert('固定している行はありません'); return; }
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) { ui.alert('ほかの処理が動いています。少し待ってからもう一度実行してください'); return; }
+  try {
+    const sheet = requireSheetV3_(SpreadsheetApp.getActive(), KKV3_CARD.IMPORT_SHEET);
+    let count = 0;
+    kkbApiCardFrozenRows_().forEach(([a, b]) => {
+      sheet.getRange(a, KKB_CARDJ.COL, b - a + 1, 1).setFormulasR1C1(Array.from({ length: b - a + 1 }, () => [base]));
+      count += b - a + 1;
+    });
+    props.deleteProperty(KKB_CARDJ.ROWS);
+    props.deleteProperty(KKB_CARDJ.FORMULA);
+    ui.alert('元の数式に戻しました：' + count + '行');
+  } finally { lock.releaseLock(); }
+}
+
+// ---- 軽くする：控えのシートを別ファイルに移す ----
+// 名前が「_改修前」「01_Raw_Data_backup_」で始まる非表示のシートを、新しいスプレッドシートへコピーし、
+// 中身が同じことを確かめてから、元のファイルから削除する。新しいファイルは自分だけが見られる状態で作られる。
+function kkbApiBackupSheets_(ss) {
+  return ss.getSheets().filter(s => s.isSheetHidden() && /^(_改修前|01_Raw_Data_backup_)/.test(s.getName()));
+}
+
+function kkbApiMoveBackups() {
+  const ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive(), NL = String.fromCharCode(10);
+  const list = kkbApiBackupSheets_(ss);
+  if (!list.length) { ui.alert('移す控えのシートはありません'); return; }
+  if (ui.alert('控えのシートを別ファイルに移しますか？',
+    list.length + '枚のシートを新しいスプレッドシートにコピーし、中身が同じことを確かめてから、このファイルから削除します。' + NL + NL +
+    list.map(s => s.getName()).join(NL), ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
+  const name = ss.getName() + '_控え_' + Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd');
+  const dest = SpreadsheetApp.create(name);
+  const blank = dest.getSheets()[0];
+  const same = (a, b) => {
+    const ra = a.getLastRow(), ca = a.getLastColumn();
+    if (ra !== b.getLastRow() || ca !== b.getLastColumn()) return false;
+    if (!ra || !ca) return true;
+    return JSON.stringify(a.getRange(1, 1, ra, ca).getValues()) === JSON.stringify(b.getRange(1, 1, ra, ca).getValues());
+  };
+  const moved = [], kept = [];
+  list.forEach(s => {
+    const copy = s.copyTo(dest);
+    copy.setName(s.getName());
+    if (same(s, copy)) moved.push(s); else kept.push(s.getName());
+  });
+  dest.deleteSheet(blank);
+  moved.forEach(s => ss.deleteSheet(s));
+  ui.alert('移しました：' + moved.length + '枚' + NL + '移した先：' + name + NL + dest.getUrl() +
+    (kept.length ? NL + NL + '中身が一致しなかったため、残したシート：' + NL + kept.join(NL) : ''));
 }
