@@ -484,6 +484,7 @@ body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-even
 .pickrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 8px; margin-top: 12px; }
 .pickbtn { display: flex; align-items: center; gap: 6px; min-height: 46px; padding: 0 12px; text-align: left; }
 .pickbtn svg { flex: none; color: var(--muted); }
+.pickbtn span { white-space: nowrap; }
 .ellipsis { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .entry .line { margin-top: 10px; }
 
@@ -511,3 +512,22 @@ body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-even
 /* 金額：長押しでペースト。見た目は入力欄に見せない */
 .amountinput { flex: 1; min-width: 0; width: 100%; text-align: right; border: 0; background: none; padding: 0; color: var(--text); caret-color: transparent; outline: none; -webkit-user-select: text; user-select: text; }
 .amountinput.placeholder { color: var(--muted); }
+
+/* 週ごとの変動費 */
+.weekbars .wb { padding: 9px 0; border-top: 1px solid rgba(80, 55, 30, .08); }
+.weekbars .wb:first-child { border-top: 0; padding-top: 2px; }
+.weekbars .row { white-space: nowrap; margin-bottom: 6px; }
+.wbtrack { position: relative; height: 10px; border-radius: 6px; background: rgba(255, 255, 255, .55); box-shadow: inset 0 1px 2px rgba(80, 55, 30, .08); }
+.wbtrack i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: var(--primary); transform-origin: left; }
+.wbtrack i.warn { background: #D9A036; }
+.wbtrack i.cut { border-radius: 6px 0 0 6px; }
+.wbtrack i.bad { background: var(--error); border-radius: 0 6px 6px 0; }
+.wbtrack b { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--text); }
+@media (prefers-reduced-motion: no-preference) { .wbtrack i { animation: grow .9s cubic-bezier(.2, .8, .2, 1) both; animation-delay: var(--d, 0s); } }
+
+/* ひとことで入力 */
+.quick { margin: 4px 0 2px; }
+.quickbox { position: relative; }
+.quickbox svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted, #8a7d72); pointer-events: none; }
+.quickbox .input { padding-left: 38px; }
+.quick .hint { margin-top: 4px; }

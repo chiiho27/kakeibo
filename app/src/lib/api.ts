@@ -2,7 +2,9 @@ import type { FrozenBudgets, SpecialFund } from './report';
 import type { EditOp, Master, Op, SheetRow } from './types';
 
 export interface PullResult { rows: SheetRow[]; master: Master; special?: SpecialFund | null; frozen?: FrozenBudgets; serverTime: string; capacity?: { used: number; max: number } }
-export interface PushResult { opId: string; status: 'done' | 'error'; txId?: string; error?: string; message?: string; repeated?: boolean }
+export interface PushResult { opId: string; status: 'done' | 'error'; txId?: string; error?: string; message?: string; repeated?: boolean;
+  sheetRow?: SheetRow | null;  // 書き込んだあとの行（追加・修正）。古いスクリプトや再送の応答には無い
+  deleted?: boolean }
 
 /**
  * network: 応答が届かなかった（スプレッドシートに入ったかどうか分からない）

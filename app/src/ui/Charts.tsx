@@ -35,6 +35,29 @@ export function Meter({ pct, tone = 'ok', tick, wait = 0, label }: { pct: number
   );
 }
 
+/** 週ごとの変動費。縦線が週の予算、越えた分は赤。今週は黄色 */
+export function WeekBars({ weeks }: { weeks: { label: string; spent: number; budget: number; current: boolean; future: boolean }[] }) {
+  const max = Math.max(1, ...weeks.map(w => Math.max(w.spent, w.budget))) * 1.05;
+  return (
+    <div className="weekbars">
+      {weeks.map((w, n) => {
+        const over = w.budget > 0 && w.spent > w.budget;
+        const base = (over ? w.budget : w.spent) / max, extra = over ? (w.spent - w.budget) / max : 0;
+        return (
+          <div key={w.label} className="wb" role="img" aria-label={`${w.label} ${yen(w.spent)}${w.budget ? `、週の予算 ${yen(w.budget)}${over ? '、超過' : ''}` : ''}`}>
+            <div className="row num"><span>{w.label}</span><span className={over ? 'over' : ''}>{w.future && !w.spent ? '' : yen(w.spent)}</span></div>
+            <div className="wbtrack">
+              {base > 0 && <i className={`${w.current ? 'warn' : ''} ${over ? 'cut' : ''}`} style={{ width: `${base * 100}%`, ...delay(0.2 + n * 0.06) }} />}
+              {extra > 0 && <i className="bad" style={{ left: `${base * 100}%`, width: `${extra * 100}%`, ...delay(0.5 + n * 0.06) }} />}
+              {w.budget > 0 && <b style={{ left: `${(w.budget / max) * 100}%` }} />}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** 内訳の円グラフ。項目ごとに順番に描く。金額は凡例にすべて書く */
 export function Donut({ slices, title }: { slices: Slice[]; title: string }) {
   const sheen = useId().replace(/:/g, '');

@@ -1,7 +1,7 @@
 import { monthTotals, type MonthTotals } from './budget';
 import { isNoMoneyDay } from './budget';
-import { daysInMonth, ymd } from './date';
-import type { Master } from './types';
+import { daysInMonth, weeksOfMonth, ymd } from './date';
+import type { Master, SheetRow } from './types';
 
 type Entry = { date: string; amount: number; kubun: string; himoku: string };
 
@@ -100,4 +100,18 @@ export function nmdStats(list: Entry[], ym: string, day: string) {
     streak++;
   }
   return { month: count(y, m), lastMonth: m === 1 ? count(y - 1, 12) : count(y, m - 1), streak };
+}
+
+export interface WeekSpend { label: string; spent: number; budget: number; current: boolean; future: boolean }
+/** 月の変動費を週（月曜はじまり、月の中で区切る）ごとに集計。週の予算＝月の予算×その週の日数÷月の日数 */
+export function weekSpend(rows: SheetRow[], ym: string, monthBudget: number, day: string): WeekSpend[] {
+  const [y, m] = ym.split('-').map(Number);
+  const weeks = weeksOfMonth(y, m);
+  const total = weeks.reduce((n, w) => n + w.days.length, 0);
+  return weeks.map(w => {
+    const first = w.days[0], last = w.days[w.days.length - 1];
+    const label = `${m}/${Number(first.slice(8))}${w.days.length > 1 ? '〜' + Number(last.slice(8)) : ''}`;
+    const spent = rows.filter(r => r.kubun === '支出（変動費）' && w.days.includes(r.date)).reduce((n, r) => n + r.amount, 0);
+    return { label, spent, budget: Math.round(monthBudget * w.days.length / total), current: w.days.includes(day), future: first > day };
+  });
 }

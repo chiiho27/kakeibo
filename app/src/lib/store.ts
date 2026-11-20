@@ -40,12 +40,12 @@ export function useApp() {
   }, [conn.mode]);
 
   const busy = useRef(false);
-  const sync = useCallback(async (manual = false): Promise<Notice | null> => {
+  const sync = useCallback(async (manual = false, afterSave = false): Promise<Notice | null> => {
     if (!api) return { text: 'スプレッドシートに未接続です', kind: 'error' };
     if (busy.current) return null;
     busy.current = true; setSyncing(true);
     try {
-      const r = await syncNow(api);
+      const r = await syncNow(api, { skipPullIfMerged: afterSave });
       await reload();
       const msg = syncMessage(r, (await listOps()).length);
       // 自動同期の失敗は上部の状態表示（未送信件数）で知らせ、毎回の通知は出さない
@@ -83,7 +83,7 @@ export function useApp() {
     const list = await listOps();
     setOps(list);
     setNotice({ text: `端末に保存しました・未送信 ${list.length}件`, kind: 'info' });
-    sync();
+    sync(false, true);
   }, [sync]);
 
   /** 送信済み取引の修正（tx あり）・削除（tx なし）。端末に保存してすぐ戻り、送信は後ろで行う。戻り値は画面に出すエラー文、成功なら空文字。 */
@@ -97,7 +97,7 @@ export function useApp() {
     await putOp({ opId, type: tx ? 'update' : 'delete', tx: tx ?? shown, target, state: 'pending', createdAt: Date.now() });
     setOps(await listOps());
     setNotice({ text: tx ? '修正を端末に保存しました。スプレッドシートへ送っています' : '削除を端末に保存しました。スプレッドシートへ送っています', kind: 'info' });
-    sync();
+    sync(false, true);
     return '';
   }, [sync]);
 
@@ -124,7 +124,7 @@ export function useApp() {
     if (!op) return;
     await putOp({ ...op, state: 'pending', error: undefined });
     setOps(await listOps());
-    sync();
+    sync(false, true);
   }, [sync]);
 
   const savePrefs = useCallback(async (p: Prefs) => { setPrefs(p); await setMeta('prefs', p); }, []);

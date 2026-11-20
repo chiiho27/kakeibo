@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { monthTotals } from '../lib/budget';
 import { today } from '../lib/date';
 import { displayName, yen } from '../lib/display';
-import { expenseSlices, fiscalYearOf, monthGroups, yearReport } from '../lib/report';
+import { expenseSlices, fiscalYearOf, monthGroups, weekSpend, yearReport } from '../lib/report';
 import type { AppState } from '../lib/store';
-import { CountUp, Donut, Meter, YearBars } from './Charts';
+import { CountUp, Donut, Meter, WeekBars, YearBars } from './Charts';
 
 export type ReportTab = 'month' | 'year' | 'special';
 const TABS: [ReportTab, string][] = [['month', '月別'], ['year', '年間'], ['special', '特別費']];
@@ -41,11 +41,14 @@ function Month({ app }: { app: AppState }) {
   const months = [...new Set([...app.snap.rows.map(r => r.date.slice(0, 7)), now])].sort();
   const [ym, setYm] = useState(now);
   const i = months.indexOf(ym);
+  // 週の予算のもと：変動費の月の予算の合計（固定された月はその値）
+  const varBudget = monthGroups(app.snap.master, app.snap.rows, ym, '支出（変動費）').reduce((n, l) => n + ((app.snap.frozen?.[ym]?.[l.group] ?? l.budget) || 0), 0);
   return (
     <div className="report" key={ym}>
       <Stepper label={`${ym.slice(0, 4)}年${monthLabel(ym)}`} prev={i > 0 ? () => setYm(months[i - 1]) : undefined} next={i < months.length - 1 ? () => setYm(months[i + 1]) : undefined} />
       <Summary title="記録ベース収支" t={monthTotals(app.snap.rows, ym)} />
       <section className="section card"><h2>変動費の内訳</h2><Donut slices={expenseSlices(app.snap.master, app.snap.rows, ym, '支出（変動費）')} title="この月の変動費" /></section>
+      <section className="section card"><h2>週ごとの変動費</h2><WeekBars weeks={weekSpend(app.snap.rows, ym, varBudget, today())} /></section>
       {GROUPS.map(([k, label]) => {
         const lines = monthGroups(app.snap.master, app.snap.rows, ym, k);
         // 固定費の予算は月ごとの記録がないので、過去の月には出さない

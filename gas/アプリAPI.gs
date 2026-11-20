@@ -267,7 +267,8 @@ function kkbApiPush_(ss, ops, device) {
     const entry = [op.opId, tx.id, 'add', row, hash, new Date(), device.name];
     ledger.appendRow(entry);
     done[op.opId] = { opId: op.opId, txId: tx.id, row: row };
-    results.push({ opId: op.opId, status: 'done', txId: tx.id, row: row });
+    // 書き込んだ行をそのまま返す。アプリはこれを手元の明細に足し、明細の読み直しを省く
+    results.push({ opId: op.opId, status: 'done', txId: tx.id, row: row, sheetRow: written ? Object.assign(written, { id: tx.id, hash: hash, row: row }) : null });
   });
   return { ok: true, results: results };
 }
@@ -282,7 +283,7 @@ function kkbApiEdit_(raw, ledger, tz, op, device) {
   const target = op.target || {};
   const row = kkbApiFindRow_(raw, tz, target);
   if (row < 0) return { opId: op.opId, status: 'error', error: 'conflict' };
-  let hash = '';
+  let hash = '', written = null;
   if (op.type === 'delete') {
     raw.getRange(row, 2, 1, 8).clearContent();
     raw.getRange(row, 12).clearContent();
@@ -298,10 +299,13 @@ function kkbApiEdit_(raw, ledger, tz, op, device) {
     SpreadsheetApp.flush();
     raw.getRange(row, 5).setValue(tx.himoku);
     SpreadsheetApp.flush();
-    hash = kkbApiRowHash_(kkbApiNormalizeRow_(raw.getRange(row, 2, 1, 8).getValues()[0], tz));
+    written = kkbApiNormalizeRow_(raw.getRange(row, 2, 1, 8).getValues()[0], tz);
+    hash = kkbApiRowHash_(written);
   }
   ledger.appendRow([op.opId, target.id || '', op.type, row, hash, new Date(), device.name]);
-  return { opId: op.opId, status: 'done', txId: target.id, row: row };
+  // 修正後の行（削除なら deleted）を返す。アプリはこれで手元の明細を直し、読み直しを省く
+  return { opId: op.opId, status: 'done', txId: target.id, row: row,
+    sheetRow: written ? Object.assign(written, { id: target.id, hash: hash, row: row }) : null, deleted: op.type === 'delete' };
 }
 
 // 行番号は目安。その行の内容が違えば同じ内容の行を探し、1行に決まらないときは -1

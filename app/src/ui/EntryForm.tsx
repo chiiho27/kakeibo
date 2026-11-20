@@ -1,9 +1,10 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CreditCard, Delete, LayoutGrid, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CreditCard, Delete, LayoutGrid, Mic, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { evaluate, formatExpr, hasOperator, press } from '../lib/calc';
 import { daysInMonth, isValidYmd, parts, slash, today, weekdayMon, ymd } from '../lib/date';
 import { getMeta, setMeta } from '../lib/db';
+import { parseQuick } from '../lib/quick';
 import { displayName, iconFor, KUBUN_LABEL, yen } from '../lib/display';
 import type { AppState } from '../lib/store';
 import { K_INC, K_SAVE, K_VAR, SATISFACTION, type Kubun, type Op, type SheetRow } from '../lib/types';
@@ -73,11 +74,13 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
   const [saving, setSaving] = useState(false);
   const [sheet, setSheet] = useState<'date' | 'method' | 'himoku' | null>(null);
   const set = (p: Partial<Draft>) => setF(x => ({ ...x, ...p }));
+  const [quick, setQuick] = useState('');
+  const [quickNote, setQuickNote] = useState('');
 
   // 開くたびに：修正なら対象の取引、入力途中の下書きがあればそれ、なければ設定の初期値から始める
   useEffect(() => {
     if (!open) { setLoaded(false); return; }
-    setErrors({});
+    setErrors({}); setQuick(''); setQuickNote('');
     if (editRow) {
       setF({ opId: crypto.randomUUID(), txId: editRow.id, date: editRow.date, expr: String(editRow.amount), kubun: editRow.kubun as Kubun, himoku: editRow.himoku, himokuPicked: true,
         method: editRow.method, place: editRow.g, sat: (SATISFACTION as readonly string[]).includes(editRow.sat) ? editRow.sat : '' });
@@ -155,6 +158,23 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
     set({ expr: String(Math.round(Number(m[0]))) });
   };
 
+  // ひとことで入力：読み取れた項目だけを入力欄に入れる（読み取れなかった項目は今の値のまま）
+  function applyQuick() {
+    if (!quick.trim()) return;
+    const r = parseQuick(quick, { today: today(), methods: methodList, himoku: items.map(i => ({ kubun: i.kubun, himoku: i.himoku })), history: [...history.values()] });
+    const p: Partial<Draft> = {};
+    if (r.amount) p.expr = String(r.amount);
+    if (r.date) p.date = r.date;
+    if (r.method) p.method = r.method;
+    if (r.place) p.place = r.place;
+    if (r.himoku && r.kubun) { p.kubun = r.kubun as Kubun; p.himoku = r.himoku; p.himokuPicked = true; }
+    set(p);
+    const got = [r.amount && yen(r.amount), r.himoku && displayName(r.himoku), r.method, r.place, r.date && (r.date === today() ? '今日' : slash(r.date).slice(5))].filter(Boolean);
+    setQuickNote(got.length ? '読み取り：' + got.join('・') : '読み取れませんでした。下の欄で入力してください');
+    if (r.amount) setErrors(e => ({ ...e, amount: '' }));
+    setQuick('');
+  }
+
   async function save(next: 'close' | 'continue') {
     if (saving) return;
     const errs: Record<string, string> = {};
@@ -223,6 +243,17 @@ export function EntryForm({ app, editing, editRow, open, onClose }: { app: AppSt
             </div>
             {editing && <p className="hint">未送信の取引を修正中</p>}
             {editRow && <p className="hint">送信済みの取引を修正中</p>}
+            {!editing && !editRow && (
+              <div className="quick">
+                <div className="quickbox">
+                  <Mic size={18} strokeWidth={2} aria-hidden="true" />
+                  <input className="input" aria-label="ひとことで入力" placeholder="コンビニ 580円 カード" value={quick} autoComplete="off" enterKeyHint="done"
+                    onChange={e => setQuick(e.target.value)} onBlur={applyQuick}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.blur(); } }} />
+                </div>
+                <p className="hint" aria-live="polite" hidden={!quickNote}>{quickNote}</p>
+              </div>
+            )}
 
             <div className="amountbox" aria-live="polite">
               {hasOperator(f.expr) && <div className="muted num">{formatExpr(f.expr)}</div>}
