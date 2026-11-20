@@ -10,7 +10,7 @@ import { Reports } from './ui/Reports';
 import { Settings } from './ui/Settings';
 
 type Tab = 'home' | 'list' | 'report' | 'settings';
-const TABS: [Tab, string, typeof House][] = [['home', 'ホーム', House], ['list', '明細', List], ['report', 'レポート', ChartPie], ['settings', '設定', Gear]];
+const TABS: [Tab, string, typeof House][] = [['home', 'ホーム', House], ['report', 'レポート', ChartPie], ['list', '明細', List], ['settings', '設定', Gear]];
 
 export function App() {
   const app = useApp();
