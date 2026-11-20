@@ -35,7 +35,13 @@ export function App() {
     if (next) { setSlide(dx < 0 ? 'from-right' : 'from-left'); setTab(next[0]); }
   };
   // 新しい版は「更新」を押すまで適用しない。更新しても端末の未送信データは消えない。
-  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW();
+  // iPhone のホーム画面アプリは裏から戻っても読み込み直さないので、画面に戻るたびに新しい版を探す
+  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({
+    onRegisteredSW(_url, reg) {
+      if (!reg) return;
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && navigator.onLine) reg.update().catch(() => {}); });
+    },
+  });
 
   useEffect(() => {
     if (!app.notice) return;
