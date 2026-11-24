@@ -7,9 +7,8 @@ export function WeeklyScope({ master }: { master: Master }) {
   const items = weeklyItems(master).sort((a, b) => a.order - b.order);
   return items.length > 0 ? (
     <details className="weeklyscope">
-      <summary>週管理に設定した{items.length}費目が対象</summary>
-      <p>{items.map(i => displayName(i.himoku)).join('・')}</p>
-      <p className="hint">対象は設定の「費目」で変更できます。</p>
+      <summary>週管理に設定した{items.length}費目</summary>
+      <p>{items.map(i => displayName(i.himoku)).join('、')}</p>
     </details>
   ) : null;
 }
