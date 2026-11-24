@@ -6,7 +6,6 @@ import { expenseSlices, weeklyMonthTotals } from '../lib/report';
 import type { AppState } from '../lib/store';
 import { K_VAR } from '../lib/types';
 import { CountUp, Donut, Meter } from './Charts';
-import { WeeklyScope } from './WeeklyScope';
 
 const NMD: Record<string, LucideIcon> = { sprout: Sprout, leaf: Leaf, star: Star, smile: Smile, 'circle-check': CircleCheck, heart: Heart };
 
@@ -45,12 +44,10 @@ export function Home({ app }: { app: AppState }) {
   return (
     <div className="home">
       <section className="section card raised area-week" aria-labelledby="h-week">
-        <div className="row"><h2 id="h-week">今週の生活費予算</h2><span className="muted num">{slash(w.week.days[0]).slice(5)}〜{slash(w.week.days[w.week.days.length - 1]).slice(5)}</span></div>
+        <div className="row"><h2 id="h-week">今週の残予算</h2><span className="muted num">{slash(w.week.days[0]).slice(5)}〜{slash(w.week.days[w.week.days.length - 1]).slice(5)}</span></div>
         {!hasData ? <p className="muted">スプレッドシートの取得前です</p>
           : !w.hasWeeklyItems ? <p className="muted">週管理の費目が設定されていません</p> : (
           <>
-            <WeeklyScope master={snap.master} />
-            <p className="hint">今週の残予算</p>
             <div className={`hero num ${w.left < 0 ? 'over' : ''}`}><CountUp value={w.left} /></div>
             <Meter pct={w.budget > 0 ? spent / w.budget : 0} tone={tone} wait={0.2} label={`週の予算 ${yen(w.budget)} のうち ${yen(spent)} を使いました`} />
             <div className="row muted num meterkey"><span>使った {yen(spent)}</span><span>週の予算 {yen(w.budget)}</span></div>

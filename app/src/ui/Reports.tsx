@@ -74,6 +74,11 @@ function Month({ app }: { app: AppState }) {
               <div className="row num reportline"><span>残予算</span><b className={varBudget - varActual < 0 ? 'over' : ''}>{yen(varBudget - varActual)}</b></div>
               <p className="hint">週管理の対象外も含みます。予算残額は口座残高ではありません。</p>
             </div>}
+            {k === '支出（固定費）' && <div className="monthbudget">
+              <Line label="全固定費の月予算" value={hasBudget ? yen(lines.reduce((n, l) => n + budgetOf(l), 0)) : '記録なし'} />
+              <Line label="使った額" value={yen(lines.reduce((n, l) => n + l.actual, 0))} />
+              {!hasBudget && <p className="hint">過去月の固定費予算は保存されていません。</p>}
+            </div>}
             <div className="weekitems">
               {lines.map((l, n) => {
                 const b = hasBudget ? budgetOf(l) : 0, over = b > 0 && l.actual > b;

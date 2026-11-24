@@ -15,8 +15,10 @@ describe('レポートの同期済み集計', () => {
     const master = { methods: [], items: [
       { kubun: '支出（変動費）', himoku: '食費', budget: 30000, group: '食費', weekly: true, note: '', methods: [], order: 1 },
       { kubun: '支出（変動費）', himoku: '医療費', budget: 12000, group: '医療費', weekly: false, note: '', methods: [], order: 2 },
+      { kubun: '支出（固定費）', himoku: 'ネット', budget: 10000, group: '通信費', weekly: false, note: '', methods: [], order: 1 },
+      { kubun: '支出（固定費）', himoku: '携帯', budget: 5000, group: '通信費', weekly: false, note: '', methods: [], order: 2 },
     ] };
-    const confirmedSnap = { master, rows: [row('update', '食費', 1000), row('delete', '食費', 500), row('other', '医療費', 2000)], fetchedAt: '' };
+    const confirmedSnap = { master, rows: [row('update', '食費', 1000), row('delete', '食費', 500), row('other', '医療費', 2000), { ...row('fixed', 'ネット', 6000), kubun: '支出（固定費）' }, { ...row('fixed2', '携帯', 3000), kubun: '支出（固定費）' }], fetchedAt: '' };
     const ops = [
       { opId: 'u', type: 'update', target: { id: 'update' }, tx: { ...row('update', '食費', 9999), place: '', detail: '' }, state: 'pending', createdAt: 0 },
       { opId: 'd', type: 'delete', target: { id: 'delete' }, tx: { ...row('delete', '食費', 500), place: '', detail: '' }, state: 'pending', createdAt: 0 },
@@ -31,5 +33,7 @@ describe('レポートの同期済み集計', () => {
     expect(host.querySelector('.donutchart svg')?.getAttribute('aria-label')).toContain('合計 ¥3,500');
     expect(host.querySelector('.monthbudget')?.textContent).toContain('¥42,000');
     expect(host.querySelector('.monthbudget')?.textContent).toContain('¥38,500');
+    const fixed = [...host.querySelectorAll('section')].find(s => s.querySelector('h2')?.textContent === '固定費')!;
+    expect(fixed.querySelector('.monthbudget')?.textContent).toBe('全固定費の月予算¥15,000使った額¥9,000');
   });
 });
