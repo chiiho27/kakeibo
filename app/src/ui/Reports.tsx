@@ -1,11 +1,12 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
-import { monthTotals } from '../lib/budget';
+import { monthTotals, weeklyItems } from '../lib/budget';
 import { today } from '../lib/date';
 import { displayName, yen } from '../lib/display';
-import { expenseSlices, fiscalYearOf, monthGroups, weekSpend, yearReport } from '../lib/report';
+import { expenseSlices, fiscalYearOf, monthGroups, weeklyMonthTotals, weekSpend, yearReport } from '../lib/report';
 import type { AppState } from '../lib/store';
 import { CountUp, Donut, Meter, WeekBars, YearBars } from './Charts';
+import { WeeklyScope } from './WeeklyScope';
 
 export type ReportTab = 'month' | 'year' | 'special';
 const TABS: [ReportTab, string][] = [['month', '月別'], ['year', '年間'], ['special', '特別費']];
@@ -41,14 +42,24 @@ function Month({ app }: { app: AppState }) {
   const months = [...new Set([...app.snap.rows.map(r => r.date.slice(0, 7)), now])].sort();
   const [ym, setYm] = useState(now);
   const i = months.indexOf(ym);
-  // 週の予算のもと：変動費の月の予算の合計（固定された月はその値）
-  const varBudget = monthGroups(app.snap.master, app.snap.rows, ym, '支出（変動費）').reduce((n, l) => n + ((app.snap.frozen?.[ym]?.[l.group] ?? l.budget) || 0), 0);
+  const varLines = monthGroups(app.snap.master, app.snap.rows, ym, '支出（変動費）');
+  const varBudget = varLines.reduce((n, l) => n + (app.snap.frozen?.[ym]?.[l.group] ?? l.budget), 0);
+  const varActual = varLines.reduce((n, l) => n + l.actual, 0);
+  const life = weeklyMonthTotals(app.snap.master, app.snap.rows, ym, app.snap.frozen?.[ym]);
   return (
     <div className="report" key={ym}>
       <Stepper label={`${ym.slice(0, 4)}年${monthLabel(ym)}`} prev={i > 0 ? () => setYm(months[i - 1]) : undefined} next={i < months.length - 1 ? () => setYm(months[i + 1]) : undefined} />
       <Summary title="記録ベース収支" t={monthTotals(app.snap.rows, ym)} />
       <section className="section card"><h2>変動費の内訳</h2><Donut slices={expenseSlices(app.snap.master, app.snap.rows, ym, '支出（変動費）')} title="この月の変動費" /></section>
-      <section className="section card"><h2>週ごとの変動費</h2><WeekBars weeks={weekSpend(app.snap.rows, ym, varBudget, today())} /></section>
+      <section className="section card">
+        <h2>週ごとの生活費</h2>
+        <WeeklyScope master={app.snap.master} />
+        {weeklyItems(app.snap.master).length > 0 ? <>
+          <div className="row num reportline"><span>この月の生活費残予算</span><b className={life.left < 0 ? 'over' : ''}>{yen(life.left)}</b></div>
+          <WeekBars weeks={weekSpend(app.snap.master, app.snap.rows, ym, today(), app.snap.frozen?.[ym])} />
+          <p className="hint">週予算は日割りの目安です。余り・超過は翌週に繰り越しません。</p>
+        </> : <p className="muted">週管理の費目が設定されていません</p>}
+      </section>
       {GROUPS.map(([k, label]) => {
         const lines = monthGroups(app.snap.master, app.snap.rows, ym, k);
         // 固定費の予算は月ごとの記録がないので、過去の月には出さない
@@ -57,6 +68,12 @@ function Month({ app }: { app: AppState }) {
         return lines.length > 0 && (
           <section key={k} className="section card">
             <div className="row"><h2>{label}</h2>{hasBudget && <span className="muted">使った / 予算</span>}</div>
+            {k === '支出（変動費）' && <div className="monthbudget">
+              <Line label="全変動費の月予算" value={yen(varBudget)} />
+              <Line label="使った額" value={yen(varActual)} />
+              <div className="row num reportline"><span>残予算</span><b className={varBudget - varActual < 0 ? 'over' : ''}>{yen(varBudget - varActual)}</b></div>
+              <p className="hint">週管理の対象外も含みます。予算残額は口座残高ではありません。</p>
+            </div>}
             <div className="weekitems">
               {lines.map((l, n) => {
                 const b = hasBudget ? budgetOf(l) : 0, over = b > 0 && l.actual > b;
@@ -140,15 +157,16 @@ function Special({ app }: { app: AppState }) {
 export function Reports({ app }: { app: AppState }) {
   const [tab, setTab] = useState<ReportTab>('month');
   const unsent = app.ops.length;
+  const confirmedApp = { ...app, snap: app.confirmedSnap };
   return (
     <div>
       <div className="seg" role="group" aria-label="レポートの種類">
         {TABS.map(([t, label]) => <button key={t} type="button" aria-pressed={tab === t} onClick={() => setTab(t)}>{label}</button>)}
       </div>
-      {unsent > 0 && <p className="hint">未送信 {unsent}件は含みません</p>}
-      {tab === 'month' && <Month app={app} />}
-      {tab === 'year' && <Year app={app} />}
-      {tab === 'special' && <Special app={app} />}
+      {unsent > 0 && <p className="hint">同期済みの記録を表示しています。未送信の追加・修正・削除 {unsent}件は反映していません</p>}
+      {tab === 'month' && <Month app={confirmedApp} />}
+      {tab === 'year' && <Year app={confirmedApp} />}
+      {tab === 'special' && <Special app={confirmedApp} />}
     </div>
   );
 }

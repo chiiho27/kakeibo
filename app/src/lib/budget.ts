@@ -9,6 +9,9 @@ export function unsentTxs(ops: Op[], rows: SheetRow[]): NewTx[] {
   return ops.filter(o => o.type === 'add' && !ids.has(o.tx.id)).map(o => o.tx);
 }
 
+/** ホームとレポートで共通の週管理対象。非表示の費目も集計には残す。 */
+export const weeklyItems = (master: Master) => master.items.filter(i => i.kubun === K_VAR && i.weekly);
+
 const sum = (list: Entry[]) => list.reduce((s, e) => s + e.amount, 0);
 
 export interface WeekStatus {
@@ -24,7 +27,7 @@ export interface WeekStatus {
 export function weekStatus(master: Master, rows: SheetRow[], unsent: NewTx[], day = todayOf()): WeekStatus {
   const week = weekOf(day);
   const [y, m] = parts(day);
-  const items = master.items.filter(i => i.kubun === K_VAR && i.weekly);
+  const items = weeklyItems(master);
   const names = new Set(items.map(i => i.himoku));
   const budget = items.reduce((s, i) => s + i.budget, 0) * week.days.length / daysInMonth(y, m);
   const inWeek = (e: Entry) => e.kubun === K_VAR && names.has(e.himoku) && week.days.includes(e.date);
@@ -41,7 +44,7 @@ export function weekItems(master: Master, list: Entry[], day = todayOf()) {
   const week = weekOf(day);
   const [y, m] = parts(day);
   const byName = new Map<string, { himoku: string; budget: number; spent: number; order: number }>();
-  master.items.filter(i => i.kubun === K_VAR && i.weekly).forEach(i => {
+  weeklyItems(master).forEach(i => {
     const it = byName.get(i.himoku) ?? { himoku: i.himoku, budget: 0, spent: 0, order: i.order };
     it.budget += i.budget * week.days.length / daysInMonth(y, m);
     byName.set(i.himoku, it);
