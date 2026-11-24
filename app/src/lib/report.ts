@@ -1,5 +1,5 @@
 import { monthTotals, type MonthTotals } from './budget';
-import { isNoMoneyDay } from './budget';
+import { isNoMoneyDay, weeklyItems } from './budget';
 import { daysInMonth, weeksOfMonth, ymd } from './date';
 import type { Master, SheetRow } from './types';
 
@@ -102,16 +102,28 @@ export function nmdStats(list: Entry[], ym: string, day: string) {
   return { month: count(y, m), lastMonth: m === 1 ? count(y - 1, 12) : count(y, m - 1), streak };
 }
 
+/** 週管理対象だけの月予算と実績。予算を持たない対象費目の支出も含める。 */
+export function weeklyMonthTotals(master: Master, rows: Entry[], ym: string, frozen?: Record<string, number>) {
+  const items = weeklyItems(master);
+  const names = new Set(items.map(i => i.himoku));
+  const selected = rows.filter(r => r.kubun === '支出（変動費）' && names.has(r.himoku));
+  const groups = monthGroups({ ...master, items }, selected, ym, '支出（変動費）');
+  const budget = groups.reduce((n, g) => n + (frozen?.[g.group] ?? g.budget), 0);
+  const actual = selected.filter(r => r.date.startsWith(ym)).reduce((n, r) => n + r.amount, 0);
+  return { budget, actual, left: budget - actual };
+}
+
 export interface WeekSpend { label: string; spent: number; budget: number; current: boolean; future: boolean }
-/** 月の変動費を週（月曜はじまり、月の中で区切る）ごとに集計。週の予算＝月の予算×その週の日数÷月の日数 */
-export function weekSpend(rows: SheetRow[], ym: string, monthBudget: number, day: string): WeekSpend[] {
+/** 週管理対象の生活費。月曜始まり・月内で区切り、6週目は5週目へ。丸めは表示時のみ。 */
+export function weekSpend(master: Master, rows: SheetRow[], ym: string, day: string, frozen?: Record<string, number>): WeekSpend[] {
   const [y, m] = ym.split('-').map(Number);
   const weeks = weeksOfMonth(y, m);
-  const total = weeks.reduce((n, w) => n + w.days.length, 0);
+  const names = new Set(weeklyItems(master).map(i => i.himoku));
+  const monthBudget = weeklyMonthTotals(master, rows, ym, frozen).budget;
   return weeks.map(w => {
     const first = w.days[0], last = w.days[w.days.length - 1];
     const label = `${m}/${Number(first.slice(8))}${w.days.length > 1 ? '〜' + Number(last.slice(8)) : ''}`;
-    const spent = rows.filter(r => r.kubun === '支出（変動費）' && w.days.includes(r.date)).reduce((n, r) => n + r.amount, 0);
-    return { label, spent, budget: Math.round(monthBudget * w.days.length / total), current: w.days.includes(day), future: first > day };
+    const spent = rows.filter(r => r.kubun === '支出（変動費）' && names.has(r.himoku) && w.days.includes(r.date)).reduce((n, r) => n + r.amount, 0);
+    return { label, spent, budget: monthBudget * w.days.length / daysInMonth(y, m), current: w.days.includes(day), future: first > day };
   });
 }

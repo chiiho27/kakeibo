@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { kanjiNumber, parseQuick, type QuickContext } from './quick';
 import { weekSpend } from './report';
-import type { SheetRow } from './types';
+import type { Master, SheetRow } from './types';
 
 const ctx: QuickContext = {
   today: '2026-11-20',
@@ -37,11 +37,12 @@ describe('ひとことで入力', () => {
   });
 });
 
-describe('週ごとの変動費', () => {
+describe('週ごとの生活費', () => {
   const r = (date: string, amount: number, kubun = '支出（変動費）'): SheetRow => ({ id: date + amount, date, amount, kubun, himoku: '食費', method: '', g: '', sat: '', source: '' });
   it('月曜はじまりで区切り、週の予算は日数割り', () => {
     // 2026年11月1日は日曜
-    const w = weekSpend([r('2026-11-01', 500), r('2026-11-02', 1000), r('2026-11-02', 300, '収入')], '2026-11', 30000, '2026-11-20');
+    const master: Master = { methods: [], items: [{ kubun: '支出（変動費）', himoku: '食費', note: '', methods: [], budget: 30000, group: '食費', order: 1, weekly: true }] };
+    const w = weekSpend(master, [r('2026-11-01', 500), r('2026-11-02', 1000), r('2026-11-02', 300, '収入')], '2026-11', '2026-11-20');
     expect(w[0]).toMatchObject({ label: '11/1', spent: 500, budget: 1000, future: false });
     expect(w[1]).toMatchObject({ label: '11/2〜8', spent: 1000, budget: 7000 });
     expect(w.find(x => x.current)!.label).toBe('11/16〜22');

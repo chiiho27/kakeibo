@@ -150,7 +150,7 @@ export function useApp() {
     }
   }, [saveConn, conn, ops]);
 
-  return { ready, conn, prefs, snap: view, ops, lastSync, syncing, notice, setNotice, online, api,
+  return { ready, conn, prefs, snap: view, confirmedSnap: snap, ops, lastSync, syncing, notice, setNotice, online, api,
     sync, saveOp, applyEdit, removeOp, retryOp, savePrefs, saveConn, pair };
 }
 export type AppState = ReturnType<typeof useApp>;

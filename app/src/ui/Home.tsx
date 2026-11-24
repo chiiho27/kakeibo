@@ -1,11 +1,12 @@
-﻿import { CircleAlert, CircleCheck, Heart, Leaf, Smile, Sprout, Star, type LucideIcon } from 'lucide-react';
+import { CircleAlert, CircleCheck, Heart, Leaf, Smile, Sprout, Star, type LucideIcon } from 'lucide-react';
 import { isNoMoneyDay, monthTotals, unsentTxs, weekItems, weekStatus } from '../lib/budget';
 import { daysInMonth, parts, slash, today, weekdayMon, ymd } from '../lib/date';
 import { displayName, yen } from '../lib/display';
-import { expenseSlices } from '../lib/report';
+import { expenseSlices, weeklyMonthTotals } from '../lib/report';
 import type { AppState } from '../lib/store';
 import { K_VAR } from '../lib/types';
 import { CountUp, Donut, Meter } from './Charts';
+import { WeeklyScope } from './WeeklyScope';
 
 const NMD: Record<string, LucideIcon> = { sprout: Sprout, leaf: Leaf, star: Star, smile: Smile, 'circle-check': CircleCheck, heart: Heart };
 
@@ -26,7 +27,8 @@ export function Home({ app }: { app: AppState }) {
   const all = [...snap.rows, ...unsent];
   const w = weekStatus(snap.master, snap.rows, unsent, day);
   const items = weekItems(snap.master, all, day);
-  const month = monthTotals(snap.rows, ym);
+  const month = monthTotals(app.confirmedSnap.rows, ym);
+  const life = weeklyMonthTotals(snap.master, all, ym);
   const withUnsent = monthTotals(all, ym);
   const hasData = snap.rows.length > 0 || snap.master.items.length > 0;
   const days = Array.from({ length: daysInMonth(y, m) }, (_, i) => ymd(y, m, i + 1));
@@ -43,20 +45,36 @@ export function Home({ app }: { app: AppState }) {
   return (
     <div className="home">
       <section className="section card raised area-week" aria-labelledby="h-week">
-        <div className="row"><h2 id="h-week">今週の残予算</h2><span className="muted num">{slash(w.week.days[0]).slice(5)}〜{slash(w.week.days[w.week.days.length - 1]).slice(5)}</span></div>
+        <div className="row"><h2 id="h-week">今週の生活費予算</h2><span className="muted num">{slash(w.week.days[0]).slice(5)}〜{slash(w.week.days[w.week.days.length - 1]).slice(5)}</span></div>
         {!hasData ? <p className="muted">スプレッドシートの取得前です</p>
           : !w.hasWeeklyItems ? <p className="muted">週管理の費目が設定されていません</p> : (
           <>
+            <WeeklyScope master={snap.master} />
+            <p className="hint">今週の残予算</p>
             <div className={`hero num ${w.left < 0 ? 'over' : ''}`}><CountUp value={w.left} /></div>
             <Meter pct={w.budget > 0 ? spent / w.budget : 0} tone={tone} wait={0.2} label={`週の予算 ${yen(w.budget)} のうち ${yen(spent)} を使いました`} />
             <div className="row muted num meterkey"><span>使った {yen(spent)}</span><span>週の予算 {yen(w.budget)}</span></div>
             {w.left < 0
-              ? <p className="pace bad"><CircleAlert size={16} aria-hidden="true" />予算を {yen(-w.left)} 超えています</p>
+              ? <p className="pace bad"><CircleAlert size={16} aria-hidden="true" />週の目安を {yen(-w.left)} 超えています</p>
               : forecast >= 0
                 ? <p className="pace good"><CircleCheck size={16} aria-hidden="true" />このペースなら週末に {yen(forecast)} 残ります</p>
                 : <p className="pace warn"><CircleAlert size={16} aria-hidden="true" />このペースだと週末に {yen(-forecast)} 足りません</p>}
-            {w.left > 0 && w.daysLeft > 0 && <div className="row num daily"><span>今日から1日 <b>{yen(w.left / w.daysLeft)}</b> まで</span><span className="muted">残り{w.daysLeft}日</span></div>}
-            {w.unsent > 0 && <p className="hint">未送信分 {yen(w.unsent)} を含みます</p>}
+            {w.left > 0 && w.daysLeft > 0 && <div className="row num daily"><span>1日あたりの目安 <b>{yen(w.left / w.daysLeft)}</b></span><span className="muted">残り{w.daysLeft}日</span></div>}
+            <div className="row num monthbudget"><span>今月の生活費残予算</span><b className={life.left < 0 ? 'over' : ''}>{yen(life.left)}</b></div>
+            <p className="hint">週予算は日割りの目安です。余り・超過は翌週に繰り越しません。</p>
+            {ops.length > 0 && <p className="hint">生活費は未送信分を含む暫定額です。</p>}
+          </>
+        )}
+      </section>
+
+      <section className="section card area-month" aria-labelledby="h-month">
+        <div className="row"><h2 id="h-month">今月の記録ベース収支</h2>
+          {hasData && <span className={`mid num ${month.balance < 0 ? 'over' : ''}`}><CountUp value={month.balance} format={signed} /></span>}</div>
+        {!hasData ? <p className="muted">スプレッドシートの取得前です</p> : (
+          <>
+            <div className="row muted num"><span>収入 {yen(month.income)}</span><span>支出 {yen(month.expense)}</span><span>貯蓄 {yen(month.saving)}</span></div>
+            {ops.length > 0 && <p className="hint">同期済みの収支です。未送信を反映した暫定収支は {signed(withUnsent.balance)}</p>}
+            <p className="hint">固定費・特別費も含みます。口座残高ではありません。</p>
           </>
         )}
       </section>
@@ -82,17 +100,6 @@ export function Home({ app }: { app: AppState }) {
           <Donut slices={expenseSlices(snap.master, all, ym, K_VAR)} title="今月の変動費" />
         </section>
       )}
-
-      <section className="section card area-month" aria-labelledby="h-month">
-        <div className="row"><h2 id="h-month">今月の収支</h2>
-          {hasData && <span className={`mid num ${month.balance < 0 ? 'over' : ''}`}><CountUp value={month.balance} format={signed} /></span>}</div>
-        {!hasData ? <p className="muted">スプレッドシートの取得前です</p> : (
-          <>
-            <div className="row muted num"><span>収入 {yen(month.income)}</span><span>支出 {yen(month.expense)}</span><span>貯蓄 {yen(month.saving)}</span></div>
-            {unsent.length > 0 && <p className="hint">未送信 {unsent.length}件を含めると {signed(withUnsent.balance)}</p>}
-          </>
-        )}
-      </section>
 
       <section className="section card area-cal" aria-labelledby="h-cal">
         <h2 id="h-cal" className="nmdtitle">今月のNMD <b className="num">{nmdDays.length}</b> 日</h2>

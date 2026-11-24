@@ -342,7 +342,7 @@ label.check input { accent-color: var(--primary); }
 .masterstatus { background: var(--bg); }
 
 @media (min-width: 720px) {
-  .home { grid-template-rows: auto auto auto auto 1fr; grid-template-areas: "week cal" "items cal" "donut cal" "month cal"; }
+  .home { grid-template-rows: auto auto auto auto 1fr; grid-template-areas: "week cal" "month cal" "items cal" "donut cal"; }
   .area-items { grid-area: items; } .area-donut { grid-area: donut; }
   .area-cal { margin-top: 16px; }
 }
@@ -513,7 +513,7 @@ body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-even
 .amountinput { flex: 1; min-width: 0; width: 100%; text-align: right; border: 0; background: none; padding: 0; color: var(--text); caret-color: transparent; outline: none; -webkit-user-select: text; user-select: text; }
 .amountinput.placeholder { color: var(--muted); }
 
-/* 週ごとの変動費 */
+/* 週管理対象の生活費 */
 .weekbars .wb { padding: 9px 0; border-top: 1px solid rgba(80, 55, 30, .08); }
 .weekbars .wb:first-child { border-top: 0; padding-top: 2px; }
 .weekbars .row { white-space: nowrap; margin-bottom: 6px; }
@@ -531,3 +531,10 @@ body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-even
 .quickbox svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted, #8a7d72); pointer-events: none; }
 .quickbox .input { padding-left: 38px; }
 .quick .hint { margin-top: 4px; }
+
+.weeklyscope { margin: 8px 0 16px; color: var(--muted); font-size: 14px; }
+.weeklyscope summary { cursor: pointer; padding: 8px 0; }
+.weeklyscope p { margin: 8px 0; line-height: 1.7; }
+.monthbudget { margin: 16px 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.weekbars .row { white-space: normal; flex-wrap: wrap; gap: 8px; }
+.weekbars .wbvalues { font-size: 14px; margin-bottom: 8px; }

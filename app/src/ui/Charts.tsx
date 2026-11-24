@@ -41,11 +41,12 @@ export function WeekBars({ weeks }: { weeks: { label: string; spent: number; bud
   return (
     <div className="weekbars">
       {weeks.map((w, n) => {
-        const over = w.budget > 0 && w.spent > w.budget;
+        const over = w.spent > w.budget;
         const base = (over ? w.budget : w.spent) / max, extra = over ? (w.spent - w.budget) / max : 0;
         return (
-          <div key={w.label} className="wb" role="img" aria-label={`${w.label} ${yen(w.spent)}${w.budget ? `、週の予算 ${yen(w.budget)}${over ? '、超過' : ''}` : ''}`}>
-            <div className="row num"><span>{w.label}</span><span className={over ? 'over' : ''}>{w.future && !w.spent ? '' : yen(w.spent)}</span></div>
+          <div key={w.label} className="wb" role="img" aria-label={`${w.label} 実績 ${yen(w.spent)}、予算 ${yen(w.budget)}、残額 ${yen(w.budget - w.spent)}${over ? '、超過' : ''}`}>
+            <div className="row num"><span>{w.label}{w.current ? '（今週）' : ''}</span><span className={over ? 'over' : ''}>実績 {w.future && !w.spent ? '—' : yen(w.spent)}</span></div>
+            <div className="row num wbvalues"><span className="muted">予算 {yen(w.budget)}</span><span className={over ? 'over' : 'muted'}>残額 {w.future && !w.spent ? '—' : yen(w.budget - w.spent)}</span></div>
             <div className="wbtrack">
               {base > 0 && <i className={`${w.current ? 'warn' : ''} ${over ? 'cut' : ''}`} style={{ width: `${base * 100}%`, ...delay(0.2 + n * 0.06) }} />}
               {extra > 0 && <i className="bad" style={{ left: `${base * 100}%`, width: `${extra * 100}%`, ...delay(0.5 + n * 0.06) }} />}

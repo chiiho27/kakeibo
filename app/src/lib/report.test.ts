@@ -57,3 +57,64 @@ describe('グラフとペース', () => {
     expect(nmdStats(list, '2026-11', '2026-11-07')).toEqual({ month: 4, lastMonth: 0, streak: 2 });
   });
 });
+
+import { weekSpend, weeklyMonthTotals } from './report';
+import { weekStatus } from './budget';
+import type { SheetRow } from './types';
+
+describe('生活費の集計範囲と予算', () => {
+  const master: Master = { methods: [], items: [
+    { ...item('食費', '食費', 30000, 1), weekly: true },
+    { ...item('外食', '外食', 12000, 2), weekly: true },
+    { ...item('日用品', '日用品', 6000, 3), weekly: true },
+    { ...item('こども', 'こども', 3000, 4), weekly: true },
+    { ...item('娯楽', '娯楽', 3000, 5), weekly: true },
+    { ...item('交際費', '交際費', 6000, 6), weekly: true },
+    item('衣服', '衣服', 9000, 7), item('医療', '医療', 6000, 8),
+    item('交通', '交通', 15000, 9), item('立替', '立替', 0, 10), item('その他', 'その他', 0, 11),
+  ] };
+  const row = (date: string, himoku: string, amount: number, kubun = '支出（変動費）'): SheetRow =>
+    ({ id: date + himoku, date, himoku, amount, kubun, method: '', g: '', sat: '', source: '' });
+  const rows = [row('2026-11-02', '食費', 3200), row('2026-11-04', '立替', 5000), row('2026-11-08', 'その他', 600),
+    row('2026-11-09', '衣服', 8000), row('2026-11-10', '医療', 2600), row('2026-11-11', '交通', 1800),
+    row('2026-11-30', '食費', 100), row('2026-12-01', '食費', 999), row('2026-11-03', '食費', 500, '収入')];
+
+  it('シートと同じ6費目で予算と実績を集計し、対象外5費目を月全体には残す', () => {
+    const weeks = weekSpend(master, rows, '2026-11', '2026-11-24');
+    expect(weeks[1]).toMatchObject({ spent: 3200, budget: 14000 });
+    expect(weeks[4]).toMatchObject({ label: '11/23〜30', spent: 100, budget: 16000, current: true });
+    expect(weeklyMonthTotals(master, rows, '2026-11')).toEqual({ budget: 60000, actual: 3300, left: 56700 });
+    expect(monthGroups(master, rows, '2026-11', '支出（変動費）').reduce((n, g) => n + g.budget, 0)).toBe(90000);
+    expect(weeks.reduce((n, w) => n + w.spent, 0)).toBe(3300);
+    for (const day of ['2026-11-01', '2026-11-02', '2026-11-09', '2026-11-16', '2026-11-30']) {
+      const home = weekStatus(master, rows, [], day);
+      const report = weekSpend(master, rows, '2026-11', day).find(w => w.current)!;
+      expect(report.budget).toBeCloseTo(home.budget);
+      expect(report.spent).toBe(home.confirmed);
+    }
+  });
+
+  it('週の超過を翌週へ繰り越さず、月の残予算には反映する', () => {
+    const overspent = [row('2026-11-01', '日用品', 5000)];
+    const weeks = weekSpend(master, overspent, '2026-11', '2026-11-02');
+    expect(weeks[0].budget - weeks[0].spent).toBe(-3000);
+    expect(weeks[1].budget).toBe(14000);
+    expect(weeklyMonthTotals(master, overspent, '2026-11').left).toBe(55000);
+  });
+
+  it('過去月の固定予算と0円予算を尊重する', () => {
+    const frozen = { 食費: 15000, 外食: 0 };
+    const weeks = weekSpend(master, rows, '2026-11', '2026-11-24', frozen);
+    expect(weeklyMonthTotals(master, rows, '2026-11', frozen).budget).toBe(33000);
+    expect(weeks.reduce((n, w) => n + w.budget, 0)).toBeCloseTo(33000);
+    const zeroMaster = { ...master, items: [{ ...master.items[0], budget: 0 }] };
+    expect(weeklyMonthTotals(zeroMaster, rows, '2026-11')).toEqual({ budget: 0, actual: 3300, left: -3300 });
+  });
+
+  it('週管理対象なしと未知の費目を週の予算に混ぜない', () => {
+    const empty = { ...master, items: master.items.map(i => ({ ...i, weekly: false })) };
+    expect(weeklyMonthTotals(empty, rows, '2026-11')).toEqual({ budget: 0, actual: 0, left: 0 });
+    expect(weekSpend(empty, rows, '2026-11', '2026-11-24').every(w => w.spent === 0 && w.budget === 0)).toBe(true);
+    expect(weeklyMonthTotals(master, [row('2026-11-01', '旧費目', 999)], '2026-11').actual).toBe(0);
+  });
+});
