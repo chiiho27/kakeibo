@@ -590,7 +590,10 @@ function kkbApiRowAllows_(raw, row, himoku) {
   if (!rule) return true;
   const type = rule.getCriteriaType(), args = rule.getCriteriaValues(), want = String(himoku).trim();
   if (type === SpreadsheetApp.DataValidationCriteria.VALUE_IN_RANGE) {
-    return args[0].getValues().some(line => line.some(v => String(v).trim() === want));
+    const vals = args[0].getValues();
+    // 一覧がまだ計算中で空に見えるときは、ここでは断らない（書込時の入力規則と書込後の確認に任せる）
+    if (!vals.some(line => line.some(v => String(v).trim()))) return true;
+    return vals.some(line => line.some(v => String(v).trim() === want));
   }
   if (type === SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) return (args[0] || []).some(v => String(v).trim() === want);
   return true;
@@ -1041,15 +1044,14 @@ function kkbApiSetHiddenSheet_(ss, op) {
 // 移行前後で変わってはいけない値（集計・取引・取込・固定コピペ・既存の一覧）を控える
 function kkbApiMasterSnapshot_(ss) {
   const snap = kkbApiLiteSnapshot_(ss);
-  const take = (name, cols) => {
+  // 行数はシートの「最終行」ではなく決まった行数で読む（候補の列の数式を外すと最終行が縮むため）
+  const take = (name, rows, cols) => {
     const s = ss.getSheetByName(name);
-    if (!s || !s.getLastRow()) return;
-    cols.forEach(c => { const a = kkbApiColNum_(c[0]), b = kkbApiColNum_(c[1]); snap[name + '!' + c[0]] = s.getRange(1, a, s.getLastRow(), b - a + 1).getValues(); });
+    if (!s) return;
+    cols.forEach(c => { const a = kkbApiColNum_(c[0]), b = kkbApiColNum_(c[1]); snap[name + '!' + c[0]] = s.getRange(1, a, rows, b - a + 1).getValues(); });
   };
-  take('01_Raw_Data', [['A', 'M'], ['AE', 'AE']]);
-  take('03_Card_Import', [['A', 'N']]);
-  take('固定コピペ用', [['A', 'H']]);
-  take('96_Drop_Down', [['A', 'O']]);
+  KKB_MS.SHEETS.forEach(t => take(t.name, t.last, t.name === '01_Raw_Data' ? [['A', 'M'], ['AE', 'AE']] : t.name === '03_Card_Import' ? [['A', 'N']] : [['A', 'H']]));
+  take('96_Drop_Down', 200, [['A', 'O']]);
   return snap;
 }
 
@@ -1110,7 +1112,7 @@ function kkbApiMigrateMaster() {
 
     // 4. 確かめる：集計などが1セルも変わっていないこと、一覧が空でないこと
     const diff = kkbApiLiteDiff_(before, kkbApiMasterSnapshot_(ss));
-    const empty = KKB_MS.KUBUN.filter(k => !kkbApiCandidates_(ss, k.kubun).length).map(k => k.kubun);
+    const empty = kkbApiWaitLists_(ss);
     if (diff.length || empty.length) {
       kkbApiRestoreMaster_(ss);
       ui.alert('値が変わったため元に戻しました', (diff.length ? '変わったセル：' + diff.join('、') : '') + (empty.length ? '\n候補が空の区分：' + empty.join('、') : ''), ui.ButtonSet.OK);
@@ -1123,6 +1125,24 @@ function kkbApiMigrateMaster() {
   } finally {
     lock.releaseLock();
   }
+}
+
+// 一覧の数式は重いシートでは計算に時間がかかる（読むと「読み込み中」で空に見える）。空でなくなるまで少し待つ
+function kkbApiWaitLists_(ss) {
+  let empty = [];
+  for (let i = 0; i < 12; i++) {
+    SpreadsheetApp.flush();
+    empty = KKB_MS.KUBUN.filter(k => !kkbApiCandidates_(ss, k.kubun).length).map(k => k.kubun);
+    if (!kkbApiListRange_(ss, KKB_MS.METHOD_COL).getValues().some(r => String(r[0]).trim())) empty.push('入出金方法');
+    if (!empty.length) return empty;
+    Utilities.sleep(5000);
+  }
+  // 待っても空なら、その一覧の先頭セルの数式と表示を添える
+  return empty.map(name => {
+    const k = KKB_MS.KUBUN.filter(x => x.kubun === name)[0], col = k ? k.col : KKB_MS.METHOD_COL;
+    const c = ss.getSheetByName(KKB_MS.DD).getRange(col + '2');
+    return name + '（' + col + '2 表示「' + c.getDisplayValue() + '」）';
+  });
 }
 
 // 移行前の数式・入力規則・隠す設定に戻す
