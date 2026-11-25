@@ -44,6 +44,9 @@ function onOpen() {
     .addItem('月シートの集計を元に戻す', 'kkbApiRestoreMonths')
     .addSeparator()
     .addItem('費目が空のまま残った取引行を消す', 'kkbApiClearIncompleteRows')
+    .addItem('費目管理を正本にする（移行）', 'kkbApiMigrateMaster')
+    .addItem('候補と入力規則を作り直す', 'kkbApiRebuildRules')
+    .addItem('費目管理の連動を元に戻す', 'kkbApiRestoreMasterMenu')
     .addItem('候補と入力規則のつながりを書き出す（読み取りのみ）', 'kkbApiInspectLinks')
     .addToUi();
 }
@@ -227,7 +230,10 @@ function kkbApiMaster_(ss) {
   });
   const hidden = kkbApiHidden_();
   items.forEach(i => { i.hidden = hidden.items.indexOf(i.kubun + '|' + i.himoku) >= 0; });
-  return { items: items, methods: methods.filter(m => hidden.methods.indexOf(m) < 0), hiddenMethods: hidden.methods };
+  // 費目管理の各区分の枠にある費目だけ（収入の枠の下にある「固定費予算」などの集計欄を候補に混ぜない）
+  const inBlock = {};
+  KKB_MS.KUBUN.forEach(k => { for (let r = k.first; r <= k.last; r++) { const n = String(fmRows[r - 1] ? fmRows[r - 1][kkbApiColNum_(k.name) - 1] : '').trim(); if (n) inBlock[k.kubun + '|' + n] = true; } });
+  return { items: items.filter(i => inBlock[i.kubun + '|' + i.himoku]), methods: methods.filter(m => hidden.methods.indexOf(m) < 0), hiddenMethods: hidden.methods };
 }
 
 // ---------- 追加 ----------
@@ -270,6 +276,7 @@ function kkbApiPush_(ss, ops, device) {
       raw.getRange(row, 2, 1, 3).setValues([[date, Number(tx.amount), tx.kubun]]);
       raw.getRange(row, 6, 1, 4).setValues([[tx.method, g, sat, '手入力']]);
       raw.getRange(row, 12).setValue(new Date());
+      kkbApiSetHimokuRules_(raw, row, 1, 4, 5);   // 区分に合わせて費目の候補を付け替える（移行後）
       SpreadsheetApp.flush();
       if (!kkbApiRowAllows_(raw, row, tx.himoku)) throw new Error(kkbApiNoCandidate_(tx));
       raw.getRange(row, 5).setValue(tx.himoku);
@@ -324,6 +331,7 @@ function kkbApiEdit_(raw, ledger, tz, op, device) {
       raw.getRange(row, 6, 1, 3).setValues([[tx.method, kkbApiPlaceDetail_(tx.place, tx.detail), sat]]);
       SpreadsheetApp.flush();
       if (himokuChanged) {
+        if (String(old[2]).trim() !== tx.kubun && kkbApiSetHimokuRules_(raw, row, 1, 4, 5)) SpreadsheetApp.flush();
         if (!kkbApiRowAllows_(raw, row, tx.himoku)) throw new Error(kkbApiNoCandidate_(tx));
         raw.getRange(row, 5).setValue(tx.himoku);
         SpreadsheetApp.flush();
@@ -509,6 +517,7 @@ function kkbApiCsvApply_(ss, items) {
     }
     if ((it.action !== 'add' && it.action !== 'force') || KKB_API.KUBUN.indexOf(it.kubun) < 0 || !it.himoku) { results.push({ importId: it.importId, status: 'error', error: 'invalid' }); return; }
     sheet.getRange(t.row, 7).setValue(it.kubun);
+    kkbApiSetHimokuRules_(sheet, t.row, 1, 7, 8);
     adds.push({ it: it, t: t });
   });
   SpreadsheetApp.flush();
@@ -516,7 +525,7 @@ function kkbApiCsvApply_(ss, items) {
   const ready = [];
   adds.forEach(a => {
     const v = sheet.getRange(a.t.row, 1, 1, 43).getValues()[0];
-    const candidates = v.slice(14, 43).map(x => String(x || '').trim());
+    const candidates = kkbApiMasterOn_() ? kkbApiCandidates_(ss, a.it.kubun) : v.slice(14, 43).map(x => String(x || '').trim());
     if (candidates.indexOf(a.it.himoku) < 0) { results.push({ importId: a.it.importId, status: 'error', error: 'invalid', message: '区分と費目の組合せ' }); return; }
     if (String(v[9] || '').trim() && a.it.action !== 'force') { results.push({ importId: a.it.importId, status: 'error', error: 'duplicate', message: String(v[9]) }); return; }
     if (!(v[2] instanceof Date) || !Number(v[4]) || !String(v[3]).trim() || !String(v[5]).trim()) { results.push({ importId: a.it.importId, status: 'error', error: 'invalid', message: '未完成の明細' }); return; }
@@ -544,6 +553,7 @@ function kkbApiCsvApply_(ss, items) {
       raw.getRange(x.rawRow, 2, 1, 3).setValues([[x.v[2], Number(x.v[4]), x.a.it.kubun]]);
       raw.getRange(x.rawRow, 6, 1, 4).setValues([[String(x.v[5]).trim(), String(x.v[3]).trim(), x.sat, 'カードCSV']]);
       raw.getRange(x.rawRow, 12).setValue(now);
+      kkbApiSetHimokuRules_(raw, x.rawRow, 1, 4, 5);
     } catch (err) { fail(x, err); }
   });
   if (placed.length) SpreadsheetApp.flush();
@@ -570,10 +580,8 @@ function kkbApiCsvApply_(ss, items) {
 
 // 費目管理から作られる 96_Drop_Down の一覧（G:H）に、この区分・費目の組合せがあるか
 function kkbApiHimokuKnown_(ss, kubun, himoku) {
-  const dd = ss.getSheetByName('96_Drop_Down');
-  if (!dd || dd.getLastRow() < 2) return true;   // 一覧が読めないときは、書込後の入力規則の確認に任せる
-  const key = String(kubun).trim() + '|' + String(himoku).trim();
-  return dd.getRange(2, 7, dd.getLastRow() - 1, 2).getValues().some(r => String(r[0]).trim() + '|' + String(r[1]).trim() === key);
+  const list = kkbApiCandidates_(ss, kubun);
+  return !list.length || list.indexOf(String(himoku).trim()) >= 0;   // 一覧が読めないときは、書込後の入力規則の確認に任せる
 }
 
 // その行の費目セル（E列）の入力規則が、この費目を受け付けるか。規則がなければ受け付ける
@@ -613,6 +621,7 @@ function kkbApiRestoreRow_(raw, row, s) {
     raw.getRange(row, 2, 1, 3).setValues([[cell(0), cell(1), cell(2)]]);
     raw.getRange(row, 6, 1, 4).setValues([[cell(4), cell(5), cell(6), cell(7)]]);
     raw.getRange(row, 12).setValue(s.lf || s.l);
+    kkbApiSetHimokuRules_(raw, row, 1, 4, 5);
     SpreadsheetApp.flush();
     const e = raw.getRange(row, 5);
     if (String(e.getValue()) !== String(s.values[0][3])) { e.setValue(cell(3)); SpreadsheetApp.flush(); }
@@ -770,7 +779,7 @@ function kkbApiInspectLinks() {
 // 手入力の値だけを書き換える。数式のセルには書き込まない。
 const KKB_BLOCKS = {
   '収入': { first: 3, last: 14, col: 1 },
-  '先取り貯金・投資': { first: 3, last: 15, col: 9 },
+  '先取り貯金・投資': { first: 3, last: 27, col: 9 },
   '支出（固定費）': { first: 33, last: 62, col: 1 },
   '支出（変動費）': { first: 33, last: 62, col: 9 },
   '支出（特別費）': { first: 68, last: 92, col: 1 },
@@ -781,6 +790,7 @@ const KKB_WEEK_COL = 16;
 const KKB_VAR = '支出（変動費）';
 
 function kkbApiHidden_() {
+  if (kkbApiMasterOn_()) return kkbApiHiddenFromSheet_(SpreadsheetApp.getActive());
   try { return Object.assign({ items: [], methods: [] }, JSON.parse(PropertiesService.getScriptProperties().getProperty('KKB_HIDDEN') || '{}')); }
   catch (e) { return { items: [], methods: [] }; }
 }
@@ -827,7 +837,7 @@ function kkbApiSetCell_(sh, row, col, from, to) {
 
 function kkbApiSettingsApply_(ss, op) {
   const sh = requireSheetV3_(ss, '費目管理');
-  if (op.type === 'hide') return kkbApiSetHidden_(op);
+  if (op.type === 'hide') return kkbApiMasterOn_() ? kkbApiSetHiddenSheet_(ss, op) : kkbApiSetHidden_(op);
   const b = KKB_BLOCKS[op.kubun];
   if (!b) return { status: 'error', message: '区分が正しくありません' };
   const row = Number(op.row);
@@ -852,6 +862,310 @@ function kkbApiSetHidden_(op) {
   if (!op.to && at >= 0) list.splice(at, 1);
   PropertiesService.getScriptProperties().setProperty('KKB_HIDDEN', JSON.stringify(h));
   return { status: 'done' };
+}
+
+// ---------- 費目管理を正本にする（候補と入力規則の連動） ----------
+//
+// 費目管理 → 96_Drop_Down（数式で候補一覧を作る。件数の上限なし）→ 3シートの入力規則（区分ごとの一覧を直接参照）。
+//   ・費目・入出金方法の追加／削除／区分の移動／隠す は、費目管理を書き換えるだけで数式が一覧を作り直す
+//   ・取引行の区分が変わったときだけ、その行の費目の入力規則を付け替える（手入力は onEdit、アプリ・CSV はスクリプト）
+//   ・過去の行の値は変えない（候補から外れた費目は赤い印が出るだけ）
+// 移行はメニュー「費目管理を正本にする（移行）」で1回だけ。前後で集計の値を全セル比べ、違えば自動で元に戻す。
+const KKB_MS = Object.freeze({
+  FLAG: 'KKB_MASTER_V2',          // 移行済みなら 'on'
+  BACKUP: 'KKB_MASTER_V2_BACKUP', // 移行前の数式と隠す設定
+  DD: '96_Drop_Down',
+  LIST_ROWS: 199,                 // 一覧は 2〜200 行目（費目管理の各区分の枠より十分大きい）
+  // 区分ごとの「候補に出す費目」：96_Drop_Down の列と、費目管理の枠・隠す欄
+  KUBUN: [
+    { kubun: '収入', col: 'Q', name: 'A', hide: 'H', first: 3, last: 14 },
+    { kubun: '先取り貯金・投資', col: 'R', name: 'I', hide: 'S', first: 3, last: 27 },
+    { kubun: '支出（固定費）', col: 'S', name: 'A', hide: 'H', first: 33, last: 62 },
+    { kubun: '支出（変動費）', col: 'T', name: 'I', hide: 'S', first: 33, last: 62 },
+    { kubun: '支出（特別費）', col: 'U', name: 'A', hide: 'H', first: 68, last: 92 },
+  ],
+  ALL_COL: 'V',                   // 区分が空の行に出す、すべての費目
+  METHOD_COL: 'W',                // 候補に出す入出金方法
+  METHOD_HIDE: 'R',               // 費目管理：入出金方法（Q列）の隠す欄
+  HIDE_HEADER: '候補に出さない',
+  // 取引を入れる3シート：区分・費目・入出金方法の列と、入力規則を付ける行の範囲
+  SHEETS: [
+    { name: '01_Raw_Data', kubun: 4, himoku: 5, method: 6, first: 5, last: 4986, helpers: ['N5', 'AF5'] },
+    { name: '固定コピペ用', kubun: 3, himoku: 4, method: 5, first: 2, last: 1027, helpers: ['I2', 'J2'] },
+    { name: '03_Card_Import', kubun: 7, himoku: 8, method: 6, first: 5, last: 4011, helpers: ['O5'] },
+  ],
+});
+
+const kkbApiMasterOn_ = () => PropertiesService.getScriptProperties().getProperty(KKB_MS.FLAG) === 'on';
+const kkbApiColNum_ = letter => letter.split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+
+function kkbApiListFormula_(k) {
+  const fm = "'費目管理'!";
+  const name = fm + k.name + k.first + ':' + k.name + k.last, hide = fm + k.hide + k.first + ':' + k.hide + k.last;
+  return '=IFERROR(UNIQUE(FILTER(' + name + ',' + name + '<>"",' + hide + '<>TRUE)),"")';
+}
+
+// 96_Drop_Down に書く見出しと数式（Q1:W2）
+function kkbApiListCells_() {
+  const all = KKB_MS.KUBUN[0].col + '2:' + KKB_MS.KUBUN[KKB_MS.KUBUN.length - 1].col + (KKB_MS.LIST_ROWS + 1);
+  const cells = KKB_MS.KUBUN.map(k => ({ col: k.col, head: k.kubun, formula: kkbApiListFormula_(k) }));
+  cells.push({ col: KKB_MS.ALL_COL, head: 'すべての費目', formula: '=IFERROR(UNIQUE(FILTER(TOCOL(' + all + '),TOCOL(' + all + ')<>"")),"")' });
+  cells.push({ col: KKB_MS.METHOD_COL, head: '入出金方法', formula: "=IFERROR(UNIQUE(FILTER('費目管理'!Q3:Q62,'費目管理'!Q3:Q62<>\"\",'費目管理'!" + KKB_MS.METHOD_HIDE + '3:' + KKB_MS.METHOD_HIDE + '62<>TRUE)),"")' });
+  return cells;
+}
+
+function kkbApiListRange_(ss, col) {
+  return ss.getSheetByName(KKB_MS.DD).getRange(col + '2:' + col + (KKB_MS.LIST_ROWS + 1));
+}
+
+// 区分に出す費目（移行前は 96_Drop_Down G:H の一覧）
+function kkbApiCandidates_(ss, kubun) {
+  ss = ss || SpreadsheetApp.getActive();
+  kubun = String(kubun || '').trim();
+  if (kkbApiMasterOn_()) {
+    const k = KKB_MS.KUBUN.filter(x => x.kubun === kubun)[0];
+    if (!k) return [];
+    return kkbApiListRange_(ss, k.col).getValues().map(r => String(r[0]).trim()).filter(Boolean);
+  }
+  const dd = ss.getSheetByName(KKB_MS.DD);
+  if (!dd || dd.getLastRow() < 2) return [];
+  return dd.getRange(2, 7, dd.getLastRow() - 1, 2).getValues().filter(r => String(r[0]).trim() === kubun).map(r => String(r[1]).trim()).filter(Boolean);
+}
+
+// 区分 → 費目の入力規則（拒否）。区分が空・不明なら、すべての費目
+function kkbApiRuleCache_(ss) {
+  const cache = {};
+  const make = col => SpreadsheetApp.newDataValidation().requireValueInRange(kkbApiListRange_(ss, col), true).setAllowInvalid(false).build();
+  return kubun => {
+    const k = KKB_MS.KUBUN.filter(x => x.kubun === String(kubun || '').trim())[0];
+    const col = k ? k.col : KKB_MS.ALL_COL;
+    return cache[col] = cache[col] || make(col);
+  };
+}
+
+// 指定した行の費目セルに、その行の区分の入力規則を付ける（移行前は何もしない）
+function kkbApiSetHimokuRules_(sheet, firstRow, count, kubunCol, himokuCol) {
+  if (!kkbApiMasterOn_() || count < 1) return false;
+  const rule = kkbApiRuleCache_(sheet.getParent());
+  const kubun = sheet.getRange(firstRow, kubunCol, count, 1).getValues();
+  sheet.getRange(firstRow, himokuCol, count, 1).setDataValidations(kubun.map(r => [rule(r[0])]));
+  return true;
+}
+
+// 3シートすべての費目・入出金方法の入力規則を付け直す（メニュー「候補と入力規則を作り直す」と移行で使う）
+function kkbApiApplyRules_(ss) {
+  const methodRule = SpreadsheetApp.newDataValidation().requireValueInRange(kkbApiListRange_(ss, KKB_MS.METHOD_COL), true).setAllowInvalid(false).build();
+  const rule = kkbApiRuleCache_(ss);
+  KKB_MS.SHEETS.forEach(t => {
+    const sh = ss.getSheetByName(t.name);
+    if (!sh) return;
+    const n = t.last - t.first + 1;
+    const kubun = sh.getRange(t.first, t.kubun, n, 1).getValues();
+    sh.getRange(t.first, t.himoku, n, 1).setDataValidations(kubun.map(r => [rule(r[0])]));
+    sh.getRange(t.first, t.method, n, 1).setDataValidation(methodRule);
+  });
+}
+
+function kkbApiRebuildRules() {
+  const ui = SpreadsheetApp.getUi();
+  if (!kkbApiMasterOn_()) { ui.alert('まだ移行していません。メニュー「費目管理を正本にする（移行）」を先に実行してください'); return; }
+  kkbApiApplyRules_(SpreadsheetApp.getActive());
+  ui.alert('候補と入力規則を作り直しました');
+}
+
+// シート上で区分を書き換えた・貼り付けたら、その行の費目の候補を付け替える
+function onEdit(e) {
+  try {
+    if (!e || !e.range || !kkbApiMasterOn_()) return;
+    const sh = e.range.getSheet(), t = KKB_MS.SHEETS.filter(x => x.name === sh.getName())[0];
+    if (!t) return;
+    const c1 = e.range.getColumn(), c2 = c1 + e.range.getNumColumns() - 1;
+    if (t.kubun < c1 || t.kubun > c2) return;
+    const r1 = Math.max(e.range.getRow(), t.first), r2 = Math.min(e.range.getRow() + e.range.getNumRows() - 1, t.last);
+    if (r2 >= r1) kkbApiSetHimokuRules_(sh, r1, r2 - r1 + 1, t.kubun, t.himoku);
+  } catch (err) { console.error('onEdit: ' + err); }
+}
+
+// 費目管理の「候補に出さない」欄から、隠している費目・方法を読む
+function kkbApiHiddenFromSheet_(ss) {
+  const fm = requireSheetV3_(ss, '費目管理');
+  const v = fm.getRange(1, 1, 92, kkbApiColNum_('S')).getValues();
+  const on = x => x === true || String(x).toUpperCase() === 'TRUE';
+  const items = [], methods = [];
+  KKB_MS.KUBUN.forEach(k => {
+    for (let r = k.first; r <= k.last; r++) {
+      const name = String(v[r - 1][kkbApiColNum_(k.name) - 1] || '').trim();
+      if (name && on(v[r - 1][kkbApiColNum_(k.hide) - 1])) items.push(k.kubun + '|' + name);
+    }
+  });
+  for (let r = 3; r <= 62; r++) {
+    const name = String(v[r - 1][16] || '').trim();
+    if (name && on(v[r - 1][kkbApiColNum_(KKB_MS.METHOD_HIDE) - 1]) && methods.indexOf(name) < 0) methods.push(name);
+  }
+  return { items: items, methods: methods };
+}
+
+// 隠す・戻す（費目管理のチェック欄を書く。取得時の状態と違えば上書きしない）
+function kkbApiSetHiddenSheet_(ss, op) {
+  const fm = requireSheetV3_(ss, '費目管理');
+  const to = !!op.to, check = op.from === undefined ? null : !!op.from;
+  const setFlag = (row, col) => {
+    const cell = fm.getRange(row, col), cur = cell.getValue() === true;
+    if (cur === to) return 'same';
+    if (check !== null && cur !== check) return 'conflict';
+    cell.setValue(to);
+    return 'done';
+  };
+  if (op.target === 'method') {
+    const name = String(op.key || '').trim(), rows = [];
+    fm.getRange(3, 17, 60, 1).getValues().forEach((r, i) => { if (String(r[0]).trim() === name) rows.push(3 + i); });
+    if (!rows.length) return { status: 'conflict', message: '入出金方法が見つかりません。読み直したので、確認してもう一度保存してください' };
+    const res = rows.map(r => setFlag(r, kkbApiColNum_(KKB_MS.METHOD_HIDE)));
+    if (res.indexOf('conflict') >= 0) return { status: 'conflict' };
+    return res.indexOf('done') >= 0 ? { status: 'done' } : { status: 'done', repeated: true };
+  }
+  const parts = String(op.key || (op.kubun + '|' + op.himoku)).split('|');
+  const k = KKB_MS.KUBUN.filter(x => x.kubun === parts[0])[0];
+  if (!k) return { status: 'error', message: '区分が正しくありません' };
+  const nameAt = r => String(fm.getRange(r, kkbApiColNum_(k.name)).getValue()).trim();
+  let row = Number(op.row);
+  if (!(row >= k.first && row <= k.last) || nameAt(row) !== parts[1]) {
+    row = 0;
+    for (let r = k.first; r <= k.last; r++) if (nameAt(r) === parts[1]) { row = r; break; }
+  }
+  if (!row) return { status: 'conflict', message: '費目の位置が変わっています。読み直したので、確認してもう一度保存してください' };
+  const res = setFlag(row, kkbApiColNum_(k.hide));
+  return res === 'conflict' ? { status: 'conflict' } : { status: 'done', repeated: res === 'same' };
+}
+
+// 移行前後で変わってはいけない値（集計・取引・取込・固定コピペ・既存の一覧）を控える
+function kkbApiMasterSnapshot_(ss) {
+  const snap = kkbApiLiteSnapshot_(ss);
+  const take = (name, cols) => {
+    const s = ss.getSheetByName(name);
+    if (!s || !s.getLastRow()) return;
+    cols.forEach(c => { const a = kkbApiColNum_(c[0]), b = kkbApiColNum_(c[1]); snap[name + '!' + c[0]] = s.getRange(1, a, s.getLastRow(), b - a + 1).getValues(); });
+  };
+  take('01_Raw_Data', [['A', 'M'], ['AE', 'AE']]);
+  take('03_Card_Import', [['A', 'N']]);
+  take('固定コピペ用', [['A', 'H']]);
+  take('96_Drop_Down', [['A', 'O']]);
+  return snap;
+}
+
+function kkbApiMasterFlagCells_() {
+  const cells = KKB_MS.KUBUN.map(k => ({ a1: k.hide + k.first + ':' + k.hide + k.last, head: k.hide + (k.first - 1) }));
+  cells.push({ a1: KKB_MS.METHOD_HIDE + '3:' + KKB_MS.METHOD_HIDE + '62', head: KKB_MS.METHOD_HIDE + '2' });
+  return cells;
+}
+
+function kkbApiMigrateMaster() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActive();
+  const props = PropertiesService.getScriptProperties();
+  if (kkbApiMasterOn_()) { ui.alert('移行済みです'); return; }
+  if (ui.alert('費目管理を正本にする（移行）',
+    '3シートの費目・入出金方法の候補を、費目管理から作る一覧に切り替えます。\n' +
+    '・96_Drop_Down の Q:W 列に一覧の数式を追加\n・費目管理の H・R・S 列に「' + KKB_MS.HIDE_HEADER + '」のチェック欄を追加\n' +
+    '・3シートの費目候補の列（01_Raw_Data N:AP、固定コピペ用 I:Z、03_Card_Import O:AQ）の数式を外す\n\n' +
+    '前後で集計の値を全セル比べ、1つでも違えば自動で元に戻します。数分かかります。よろしいですか？', ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) { ui.alert('ほかの処理中です。少し待ってからもう一度実行してください'); return; }
+  try {
+    const dd = requireSheetV3_(ss, KKB_MS.DD), fm = requireSheetV3_(ss, '費目管理');
+    // 書く場所が空いているかを先に確かめる（何か入っていれば何もしない）
+    const busy = [];
+    kkbApiListCells_().forEach(c => { if (dd.getRange(c.col + '1:' + c.col + (KKB_MS.LIST_ROWS + 1)).getValues().some(r => r[0] !== '')) busy.push('96_Drop_Down!' + c.col); });
+    const flagCells = kkbApiMasterFlagCells_();
+    flagCells.forEach(f => {
+      if (fm.getRange(f.a1).getValues().some(r => r[0] !== '' && r[0] !== false)) busy.push('費目管理!' + f.a1);
+      if (fm.getRange(f.head).getValue() !== '') busy.push('費目管理!' + f.head);
+    });
+    if (busy.length) { ui.alert('使う予定の場所に値があるため中止しました', busy.join('\n'), ui.ButtonSet.OK); return; }
+
+    const backup = {};
+    KKB_MS.SHEETS.forEach(t => { const s = ss.getSheetByName(t.name); if (s) t.helpers.forEach(a1 => { backup[t.name + '!' + a1] = s.getRange(a1).getFormula(); }); });
+    const hiddenBefore = kkbApiHidden_();
+    props.setProperty(KKB_MS.BACKUP, JSON.stringify({ formulas: backup, hidden: hiddenBefore }));
+
+    const before = kkbApiMasterSnapshot_(ss);
+    // 1. 一覧の数式
+    kkbApiListCells_().forEach(c => { dd.getRange(c.col + '1').setValue(c.head); dd.getRange(c.col + '2').setFormula(c.formula); });
+    // 2. 隠す欄（今アプリで隠している費目・方法を引き継ぐ）
+    const box = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+    flagCells.forEach(f => { fm.getRange(f.head).setValue(KKB_MS.HIDE_HEADER); fm.getRange(f.a1).setDataValidation(box).setValue(false); });
+    KKB_MS.KUBUN.forEach(k => {
+      for (let r = k.first; r <= k.last; r++) {
+        const name = String(fm.getRange(r, kkbApiColNum_(k.name)).getValue()).trim();
+        if (name && hiddenBefore.items.indexOf(k.kubun + '|' + name) >= 0) fm.getRange(r, kkbApiColNum_(k.hide)).setValue(true);
+      }
+    });
+    fm.getRange(3, 17, 60, 1).getValues().forEach((r, i) => { if (hiddenBefore.methods.indexOf(String(r[0]).trim()) >= 0) fm.getRange(3 + i, kkbApiColNum_(KKB_MS.METHOD_HIDE)).setValue(true); });
+    SpreadsheetApp.flush();
+    // 3. 入力規則を一覧に向け、費目候補の列の数式を外す
+    props.setProperty(KKB_MS.FLAG, 'on');
+    kkbApiApplyRules_(ss);
+    KKB_MS.SHEETS.forEach(t => { const s = ss.getSheetByName(t.name); if (s) t.helpers.forEach(a1 => { if (backup[t.name + '!' + a1]) s.getRange(a1).clearContent(); }); });
+    SpreadsheetApp.flush();
+
+    // 4. 確かめる：集計などが1セルも変わっていないこと、一覧が空でないこと
+    const diff = kkbApiLiteDiff_(before, kkbApiMasterSnapshot_(ss));
+    const empty = KKB_MS.KUBUN.filter(k => !kkbApiCandidates_(ss, k.kubun).length).map(k => k.kubun);
+    if (diff.length || empty.length) {
+      kkbApiRestoreMaster_(ss);
+      ui.alert('値が変わったため元に戻しました', (diff.length ? '変わったセル：' + diff.join('、') : '') + (empty.length ? '\n候補が空の区分：' + empty.join('、') : ''), ui.ButtonSet.OK);
+      return;
+    }
+    ui.alert('移行しました', '費目管理の変更が、アプリ・01_Raw_Data・固定コピペ用・03_Card_Import の候補にそのまま反映されます。\n元に戻すときはメニュー「費目管理の連動を元に戻す」。', ui.ButtonSet.OK);
+  } catch (err) {
+    try { kkbApiRestoreMaster_(ss); } catch (e2) { console.error(e2); }
+    ui.alert('途中で失敗したため元に戻しました：' + kkbApiErrText_(err));
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 移行前の数式・入力規則・隠す設定に戻す
+function kkbApiRestoreMaster_(ss) {
+  const props = PropertiesService.getScriptProperties();
+  const saved = JSON.parse(props.getProperty(KKB_MS.BACKUP) || '{}');
+  if (!saved.formulas) throw new Error('移行前の控えがありません');
+  // 隠す設定は、シートの今の状態をアプリの隠す設定として残す
+  if (kkbApiMasterOn_()) { try { props.setProperty('KKB_HIDDEN', JSON.stringify(kkbApiHiddenFromSheet_(ss))); } catch (e) { console.error(e); } }
+  else if (saved.hidden) props.setProperty('KKB_HIDDEN', JSON.stringify(saved.hidden));
+  props.deleteProperty(KKB_MS.FLAG);
+  Object.keys(saved.formulas).forEach(key => {
+    const i = key.indexOf('!'), s = ss.getSheetByName(key.slice(0, i));
+    if (s && saved.formulas[key]) s.getRange(key.slice(i + 1)).setFormula(saved.formulas[key]);
+  });
+  SpreadsheetApp.flush();
+  // 入力規則を、各行の候補の列（移行前と同じ形）に戻す
+  const methodOld = SpreadsheetApp.newDataValidation().requireValueInRange(ss.getSheetByName('費目管理').getRange('Q3:Q30'), true).setAllowInvalid(false).build();
+  const span = { '01_Raw_Data': ['N', 'AP'], '固定コピペ用': ['I', 'Z'], '03_Card_Import': ['O', 'AQ'] };
+  KKB_MS.SHEETS.forEach(t => {
+    const s = ss.getSheetByName(t.name);
+    if (!s) return;
+    const n = t.last - t.first + 1, sp = span[t.name];
+    s.getRange(t.first, t.himoku, n, 1).setDataValidations(Array.from({ length: n }, (_, i) =>
+      [SpreadsheetApp.newDataValidation().requireValueInRange(s.getRange(sp[0] + (t.first + i) + ':' + sp[1] + (t.first + i)), true).setAllowInvalid(false).build()]));
+    s.getRange(t.first, t.method, n, 1).setDataValidation(methodOld);
+  });
+  // 追加した一覧と隠す欄を外す
+  const dd = ss.getSheetByName(KKB_MS.DD), fm = ss.getSheetByName('費目管理');
+  kkbApiListCells_().forEach(c => dd.getRange(c.col + '1:' + c.col + '2').clearContent());
+  kkbApiMasterFlagCells_().forEach(f => { fm.getRange(f.a1).clearDataValidations().clearContent(); fm.getRange(f.head).clearContent(); });
+  SpreadsheetApp.flush();
+}
+
+function kkbApiRestoreMasterMenu() {
+  const ui = SpreadsheetApp.getUi();
+  if (ui.alert('費目管理の連動を元に戻しますか？', '移行前の費目候補の列と入力規則に戻します。今の「' + KKB_MS.HIDE_HEADER + '」の設定はアプリの隠す設定として残します。',
+    ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) { ui.alert('ほかの処理中です'); return; }
+  try { kkbApiRestoreMaster_(SpreadsheetApp.getActive()); ui.alert('元に戻しました'); }
+  catch (err) { ui.alert('戻せませんでした：' + kkbApiErrText_(err)); }
+  finally { lock.releaseLock(); }
 }
 
 // ---- 過去の月の予算を固定 ----

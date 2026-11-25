@@ -17,7 +17,7 @@ export function diffOps(i: SettingsItem, d: Draft): SettingsOp[] {
   if (Number(d.order) !== i.order) ops.push({ ...base, type: 'order', from: i.order, to: Number(d.order) });
   if (Number(d.budget) !== i.budget) ops.push({ ...base, type: 'budget', from: i.budget, to: Number(d.budget) });
   if (d.weekly !== i.weekly) ops.push({ ...base, type: 'weekly', from: i.weekly, to: d.weekly });
-  if (d.hidden !== i.hidden) ops.push({ type: 'hide', target: 'item', key: `${i.kubun}|${i.himoku}`, to: d.hidden });
+  if (d.hidden !== i.hidden) ops.push({ ...base, type: 'hide', target: 'item', key: `${i.kubun}|${i.himoku}`, from: i.hidden, to: d.hidden });
   return ops;
 }
 
@@ -110,7 +110,7 @@ export function MasterEdit({ app, open, onClose }: { app: AppState; open: boolea
           <div className="list">
             {data.methods.map(m => (
               <label key={m.name} className="li check"><span className="grow">{m.name}</span>
-                <span className="muted">隠す</span><input type="checkbox" disabled={busy} checked={m.hidden} onChange={e => run([{ type: 'hide', target: 'method', key: m.name, to: e.target.checked }])} />
+                <span className="muted">隠す</span><input type="checkbox" disabled={busy} checked={m.hidden} onChange={e => run([{ type: 'hide', target: 'method', key: m.name, from: m.hidden, to: e.target.checked }])} />
               </label>
             ))}
           </div>
