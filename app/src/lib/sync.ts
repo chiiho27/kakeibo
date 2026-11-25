@@ -8,6 +8,7 @@ export interface SyncResult {
   failed: number;          // スプレッドシートが受け付けなかった件数
   pulled: boolean;
   error?: ApiError['code'] | 'skipped';
+  detail?: string;
 }
 
 /**
@@ -37,6 +38,7 @@ export async function syncNow(api: Api, opts: { skipPullIfMerged?: boolean } = {
         // 応答が届かなかった場合だけ「入ったかもしれない」。次回同じ操作IDで再送して確かめる。
         if (err.code === 'network') for (const op of ops) await putOp({ ...op, state: 'unknown' });
         result.error = err.code;
+        result.detail = err.message !== err.code ? err.message : undefined;
         if (err.code !== 'busy') return result;
       }
     }
@@ -49,7 +51,9 @@ export async function syncNow(api: Api, opts: { skipPullIfMerged?: boolean } = {
       for (const op of await listOps()) if (op.type === 'add' && ids.has(op.tx.id)) { await deleteOp(op.opId); if (op.state !== 'pending') result.sent++; }
       result.pulled = true;
     } catch (e) {
-      result.error ||= e instanceof ApiError ? e.code : 'network';
+      const err = e instanceof ApiError ? e : new ApiError('network');
+      result.error ||= err.code;
+      result.detail ||= err.message !== err.code ? err.message : undefined;
     }
     return result;
   };
