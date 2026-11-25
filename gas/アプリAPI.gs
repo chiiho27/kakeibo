@@ -42,6 +42,9 @@ function onOpen() {
     .addItem('カード明細の照合の固定を解除', 'kkbApiUnfreezeCardMatch')
     .addItem('月シートの集計を軽くする', 'kkbApiLightenMonths')
     .addItem('月シートの集計を元に戻す', 'kkbApiRestoreMonths')
+    .addSeparator()
+    .addItem('費目が空のまま残った取引行を消す', 'kkbApiClearIncompleteRows')
+    .addItem('候補と入力規則のつながりを書き出す（読み取りのみ）', 'kkbApiInspectLinks')
     .addToUi();
 }
 
@@ -251,21 +254,35 @@ function kkbApiPush_(ss, ops, device) {
     const row = findFirstBlankByColumn_(raw, KKB_API.FIRST_ROW, 2);
     if (row > KKB_API.LAST_ROW) { results.push({ opId: op.opId, status: 'error', error: 'full' }); return; }
 
+    // 費目が費目管理（96_Drop_Down）にない組合せなら、1セルも書かずに断る
+    if (!kkbApiHimokuKnown_(ss, tx.kubun, tx.himoku)) {
+      results.push({ opId: op.opId, status: 'error', error: 'invalid', message: kkbApiNoCandidate_(tx) }); return;
+    }
+
     const date = Utilities.parseDate(tx.date, tz, 'yyyy-MM-dd');   // 日付だけの値をシートの時差で解釈
     const g = kkbApiPlaceDetail_(tx.place, tx.detail);
     const sat = tx.sat && KKB_API.SATISFACTION.indexOf(tx.sat) >= 0 ? tx.sat : 'ー';
-    // コード.gs（applyApprovedCardRows）と同じ順：区分を含む列 → 費目候補の再計算 → 費目
-    raw.getRange(row, 2, 1, 3).setValues([[date, Number(tx.amount), tx.kubun]]);
-    raw.getRange(row, 6, 1, 4).setValues([[tx.method, g, sat, '手入力']]);
-    raw.getRange(row, 12).setValue(new Date());
-    SpreadsheetApp.flush();
-    raw.getRange(row, 5).setValue(tx.himoku);
-    SpreadsheetApp.flush();
-
-    const written = kkbApiNormalizeRow_(raw.getRange(row, 2, 1, 8).getValues()[0], tz);
-    const hash = kkbApiRowHash_(written);
-    const entry = [op.opId, tx.id, 'add', row, hash, new Date(), device.name];
-    ledger.appendRow(entry);
+    let written, hash;
+    // 途中で失敗したら、この行の B:I と L を空に戻して「受付不可」で返す。
+    // リクエスト全体のエラーにすると、アプリが毎回再送して未完成の行が増えるため。
+    try {
+      // コード.gs（applyApprovedCardRows）と同じ順：区分を含む列 → 費目候補の再計算 → 費目
+      raw.getRange(row, 2, 1, 3).setValues([[date, Number(tx.amount), tx.kubun]]);
+      raw.getRange(row, 6, 1, 4).setValues([[tx.method, g, sat, '手入力']]);
+      raw.getRange(row, 12).setValue(new Date());
+      SpreadsheetApp.flush();
+      if (!kkbApiRowAllows_(raw, row, tx.himoku)) throw new Error(kkbApiNoCandidate_(tx));
+      raw.getRange(row, 5).setValue(tx.himoku);
+      SpreadsheetApp.flush();
+      written = kkbApiNormalizeRow_(raw.getRange(row, 2, 1, 8).getValues()[0], tz);
+      if (!written || written.himoku !== String(tx.himoku).trim()) throw new Error('費目を書き込めませんでした');
+      hash = kkbApiRowHash_(written);
+      ledger.appendRow([op.opId, tx.id, 'add', row, hash, new Date(), device.name]);
+    } catch (err) {
+      kkbApiClearRow_(raw, row);
+      results.push({ opId: op.opId, status: 'error', error: 'invalid', message: kkbApiErrText_(err) });
+      return;
+    }
     done[op.opId] = { opId: op.opId, txId: tx.id, row: row };
     // 書き込んだ行をそのまま返す。アプリはこれを手元の明細に足し、明細の読み直しを省く
     results.push({ opId: op.opId, status: 'done', txId: tx.id, row: row, sheetRow: written ? Object.assign(written, { id: tx.id, hash: hash, row: row }) : null });
@@ -284,25 +301,42 @@ function kkbApiEdit_(raw, ledger, tz, op, device) {
   const row = kkbApiFindRow_(raw, tz, target);
   if (row < 0) return { opId: op.opId, status: 'error', error: 'conflict' };
   let hash = '', written = null;
-  if (op.type === 'delete') {
-    raw.getRange(row, 2, 1, 8).clearContent();
-    raw.getRange(row, 12).clearContent();
-    SpreadsheetApp.flush();
-  } else {
-    const tx = op.tx || {};
+  const tx = op.tx || {};
+  if (op.type !== 'delete') {
     const problem = kkbApiValidate_(tx);
     if (problem) return { opId: op.opId, status: 'error', error: 'invalid', message: problem };
-    const sat = tx.sat && KKB_API.SATISFACTION.indexOf(tx.sat) >= 0 ? tx.sat : 'ー';
-    // 追加と同じ順：区分 → 費目候補の再計算 → 費目。データ元（I列）と登録日時（L列）は変えない。
-    raw.getRange(row, 2, 1, 3).setValues([[Utilities.parseDate(tx.date, tz, 'yyyy-MM-dd'), Number(tx.amount), tx.kubun]]);
-    raw.getRange(row, 6, 1, 3).setValues([[tx.method, kkbApiPlaceDetail_(tx.place, tx.detail), sat]]);
-    SpreadsheetApp.flush();
-    raw.getRange(row, 5).setValue(tx.himoku);
-    SpreadsheetApp.flush();
-    written = kkbApiNormalizeRow_(raw.getRange(row, 2, 1, 8).getValues()[0], tz);
-    hash = kkbApiRowHash_(written);
   }
-  ledger.appendRow([op.opId, target.id || '', op.type, row, hash, new Date(), device.name]);
+  // 失敗したら空にせず元の値に戻す（すでにある本物の取引を消さないため）
+  const before = kkbApiSaveRow_(raw, row);
+  try {
+    if (op.type === 'delete') {
+      raw.getRange(row, 2, 1, 8).clearContent();
+      raw.getRange(row, 12).clearContent();
+      SpreadsheetApp.flush();
+    } else {
+      const sat = tx.sat && KKB_API.SATISFACTION.indexOf(tx.sat) >= 0 ? tx.sat : 'ー';
+      const old = before.values[0];
+      // 区分・費目が変わらないなら E 列は書かない（候補から外した費目の過去行も直せるように）
+      const himokuChanged = String(old[2]).trim() !== tx.kubun || String(old[3]).trim() !== String(tx.himoku).trim();
+      if (himokuChanged && !kkbApiHimokuKnown_(raw.getParent(), tx.kubun, tx.himoku)) throw new Error(kkbApiNoCandidate_(tx));
+      // 追加と同じ順：区分 → 費目候補の再計算 → 費目。データ元（I列）と登録日時（L列）は変えない。
+      raw.getRange(row, 2, 1, 3).setValues([[Utilities.parseDate(tx.date, tz, 'yyyy-MM-dd'), Number(tx.amount), tx.kubun]]);
+      raw.getRange(row, 6, 1, 3).setValues([[tx.method, kkbApiPlaceDetail_(tx.place, tx.detail), sat]]);
+      SpreadsheetApp.flush();
+      if (himokuChanged) {
+        if (!kkbApiRowAllows_(raw, row, tx.himoku)) throw new Error(kkbApiNoCandidate_(tx));
+        raw.getRange(row, 5).setValue(tx.himoku);
+        SpreadsheetApp.flush();
+      }
+      written = kkbApiNormalizeRow_(raw.getRange(row, 2, 1, 8).getValues()[0], tz);
+      if (!written || written.himoku !== String(tx.himoku).trim()) throw new Error('費目を書き込めませんでした');
+      hash = kkbApiRowHash_(written);
+    }
+    ledger.appendRow([op.opId, target.id || '', op.type, row, hash, new Date(), device.name]);
+  } catch (err) {
+    kkbApiRestoreRow_(raw, row, before);
+    return { opId: op.opId, status: 'error', error: 'invalid', message: kkbApiErrText_(err) };
+  }
   // 修正後の行（削除なら deleted）を返す。アプリはこれで手元の明細を直し、読み直しを省く
   return { opId: op.opId, status: 'done', txId: target.id, row: row,
     sheetRow: written ? Object.assign(written, { id: target.id, hash: hash, row: row }) : null, deleted: op.type === 'delete' };
@@ -498,15 +532,30 @@ function kkbApiCsvApply_(ss, items) {
   const now = new Date();
   const placed = ready.slice(0, blanks.length).map((x, i) => Object.assign(x, { rawRow: blanks[i] }));
   ready.slice(blanks.length).forEach(x => results.push({ importId: x.a.it.importId, status: 'error', error: 'full' }));
-  // コード.gs と同じ順：区分を含む列 → 候補の再計算 → 費目
+  // コード.gs と同じ順：区分を含む列 → 候補の再計算 → 費目。
+  // 1行でも途中で失敗したら、その行の B:I と L を空に戻し、明細は取込前の状態（要確認など）のまま残す。
+  const fail = (x, err) => {
+    kkbApiClearRow_(raw, x.rawRow);
+    x.failed = true;
+    results.push({ importId: x.a.it.importId, status: 'error', error: 'invalid', message: kkbApiErrText_(err) });
+  };
   placed.forEach(x => {
-    raw.getRange(x.rawRow, 2, 1, 3).setValues([[x.v[2], Number(x.v[4]), x.a.it.kubun]]);
-    raw.getRange(x.rawRow, 6, 1, 4).setValues([[String(x.v[5]).trim(), String(x.v[3]).trim(), x.sat, 'カードCSV']]);
-    raw.getRange(x.rawRow, 12).setValue(now);
+    try {
+      raw.getRange(x.rawRow, 2, 1, 3).setValues([[x.v[2], Number(x.v[4]), x.a.it.kubun]]);
+      raw.getRange(x.rawRow, 6, 1, 4).setValues([[String(x.v[5]).trim(), String(x.v[3]).trim(), x.sat, 'カードCSV']]);
+      raw.getRange(x.rawRow, 12).setValue(now);
+    } catch (err) { fail(x, err); }
   });
   if (placed.length) SpreadsheetApp.flush();
-  placed.forEach(x => {
-    raw.getRange(x.rawRow, 5).setValue(x.a.it.himoku);
+  placed.filter(x => !x.failed).forEach(x => {
+    try {
+      if (!kkbApiRowAllows_(raw, x.rawRow, x.a.it.himoku)) throw new Error(kkbApiNoCandidate_(x.a.it));
+      raw.getRange(x.rawRow, 5).setValue(x.a.it.himoku);
+    } catch (err) { fail(x, err); }
+  });
+  if (placed.length) SpreadsheetApp.flush();
+  placed.filter(x => !x.failed).forEach(x => {
+    if (String(raw.getRange(x.rawRow, 5).getValue()).trim() !== String(x.a.it.himoku).trim()) { fail(x, new Error('費目を書き込めませんでした')); return; }
     sheet.getRange(x.a.t.row, 11).setValue('取込済');
     if (x.a.it.action === 'force') sheet.getRange(x.a.t.row, 14).setValue(x.a.t.note + '／' + KKB_CSV.FORCE_MARK);
     results.push({ importId: x.a.it.importId, status: 'done' });
@@ -515,6 +564,85 @@ function kkbApiCsvApply_(ss, items) {
   // 照合を値に固定している場合は、取込済になった行も続けて固定する
   if (PropertiesService.getScriptProperties().getProperty(KKB_CARDJ.FORMULA)) kkbApiCardFreeze_(ss);
   return { ok: true, results: results };
+}
+
+// ---------- 書込の失敗に備える ----------
+
+// 費目管理から作られる 96_Drop_Down の一覧（G:H）に、この区分・費目の組合せがあるか
+function kkbApiHimokuKnown_(ss, kubun, himoku) {
+  const dd = ss.getSheetByName('96_Drop_Down');
+  if (!dd || dd.getLastRow() < 2) return true;   // 一覧が読めないときは、書込後の入力規則の確認に任せる
+  const key = String(kubun).trim() + '|' + String(himoku).trim();
+  return dd.getRange(2, 7, dd.getLastRow() - 1, 2).getValues().some(r => String(r[0]).trim() + '|' + String(r[1]).trim() === key);
+}
+
+// その行の費目セル（E列）の入力規則が、この費目を受け付けるか。規則がなければ受け付ける
+function kkbApiRowAllows_(raw, row, himoku) {
+  const rule = raw.getRange(row, 5).getDataValidation();
+  if (!rule) return true;
+  const type = rule.getCriteriaType(), args = rule.getCriteriaValues(), want = String(himoku).trim();
+  if (type === SpreadsheetApp.DataValidationCriteria.VALUE_IN_RANGE) {
+    return args[0].getValues().some(line => line.some(v => String(v).trim() === want));
+  }
+  if (type === SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) return (args[0] || []).some(v => String(v).trim() === want);
+  return true;
+}
+
+const kkbApiNoCandidate_ = tx => '費目「' + tx.himoku + '」が区分「' + tx.kubun + '」の候補にありません';
+const kkbApiErrText_ = err => String(err && err.message || err).slice(0, 200);
+
+// 追加に失敗した行を空に戻す（行は消さない。数式の範囲がずれるため）
+function kkbApiClearRow_(raw, row) {
+  try {
+    raw.getRange(row, 2, 1, 8).clearContent();
+    raw.getRange(row, 12).clearContent();
+    SpreadsheetApp.flush();
+  } catch (e) { console.error('空に戻せませんでした：行' + row + ' ' + e); }
+}
+
+// 修正前の B:I と L を控える（数式のセルは数式で控える）
+function kkbApiSaveRow_(raw, row) {
+  const a = raw.getRange(row, 2, 1, 8), l = raw.getRange(row, 12);
+  return { values: a.getValues(), formulas: a.getFormulas(), l: l.getValue(), lf: l.getFormula() };
+}
+
+// 書く順は追加と同じ：区分を含む列 → 候補の再計算 → 費目（同時に書くと、古い候補で費目が断られることがある）
+function kkbApiRestoreRow_(raw, row, s) {
+  const cell = (c) => s.formulas[0][c] || s.values[0][c];
+  try {
+    raw.getRange(row, 2, 1, 3).setValues([[cell(0), cell(1), cell(2)]]);
+    raw.getRange(row, 6, 1, 4).setValues([[cell(4), cell(5), cell(6), cell(7)]]);
+    raw.getRange(row, 12).setValue(s.lf || s.l);
+    SpreadsheetApp.flush();
+    const e = raw.getRange(row, 5);
+    if (String(e.getValue()) !== String(s.values[0][3])) { e.setValue(cell(3)); SpreadsheetApp.flush(); }
+  } catch (err) { console.error('元に戻せませんでした：行' + row + ' ' + err); }
+}
+
+// メニュー：費目が空のまま残った取引行（日付・金額はあるのに E が空）を探し、確認してから値だけ消す
+function kkbApiClearIncompleteRows() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActive();
+  const raw = requireSheetV3_(ss, KKB_API.RAW_SHEET);
+  const tz = ss.getSpreadsheetTimeZone();
+  const last = Math.min(raw.getLastRow(), KKB_API.LAST_ROW);
+  if (last < KKB_API.FIRST_ROW) { ui.alert('対象の行はありません'); return; }
+  const n = last - KKB_API.FIRST_ROW + 1;
+  const v = raw.getRange(KKB_API.FIRST_ROW, 2, n, 11).getValues();   // B:L
+  const rows = [];
+  v.forEach((r, i) => {
+    if (r[0] !== '' && r[1] !== '' && String(r[3]).trim() === '' && r[10] !== '') rows.push({ row: KKB_API.FIRST_ROW + i, r: r });
+  });
+  if (!rows.length) { ui.alert('費目が空の取引行はありません'); return; }
+  const fmt = d => d instanceof Date ? Utilities.formatDate(d, tz, 'yyyy/MM/dd HH:mm') : String(d);
+  const lines = rows.slice(0, 40).map(x => '行' + x.row + '：' + fmt(x.r[0]).slice(0, 10) + '・' + x.r[1] + '・' + x.r[2] + '・' + x.r[7] + '（登録 ' + fmt(x.r[10]) + '）');
+  if (rows.length > 40) lines.push('…ほか' + (rows.length - 40) + '行');
+  if (ui.alert('費目が空の取引行 ' + rows.length + '行（行' + rows[0].row + '〜' + rows[rows.length - 1].row + '）',
+    lines.join('\n') + '\n\nこれらの行の B:I と L の値だけを消します（行は削除しません）。よろしいですか？',
+    ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
+  rows.forEach(x => { raw.getRange(x.row, 2, 1, 8).clearContent(); raw.getRange(x.row, 12).clearContent(); });
+  SpreadsheetApp.flush();
+  ui.alert(rows.length + '行の値を消しました');
 }
 
 // ---------- 共通 ----------
@@ -603,6 +731,39 @@ function kkbApiInspectMaster() {
   SpreadsheetApp.getUi().showModalDialog(
     HtmlService.createHtmlOutput('<textarea style="width:100%;height:420px" readonly onclick="this.select()">' + text + '</textarea><p>クリックして全選択し、コピーしてください。</p>').setWidth(760).setHeight(520),
     '費目管理の構造（' + out.length + '行）');
+}
+
+// 3シート（01_Raw_Data・固定コピペ用・03_Card_Import）と 96_Drop_Down の、見出し・数式・入力規則を書き出す（読み取りのみ）
+function kkbApiInspectLinks() {
+  const ss = SpreadsheetApp.getActive();
+  const out = [];
+  const dump = (name, r1, r2, head) => {
+    const sh = ss.getSheetByName(name);
+    if (!sh) { out.push('## ' + name + '：なし'); return; }
+    const cols = sh.getLastColumn();
+    r2 = Math.min(r2, sh.getLastRow());
+    out.push('## ' + name + ' 行' + r1 + '〜' + r2 + '（最終行' + sh.getLastRow() + ' 列' + cols + '）');
+    if (r2 < r1) return;
+    const range = sh.getRange(r1, 1, r2 - r1 + 1, cols), f = range.getFormulas(), v = range.getDisplayValues(), dv = range.getDataValidations();
+    f.forEach((line, r) => {
+      const cells = [];
+      line.forEach((formula, c) => {
+        const a1 = sh.getRange(r1 + r, c + 1).getA1Notation(), rule = dv[r][c];
+        if (rule) cells.push(a1 + '［規則 ' + rule.getCriteriaType() + ' ' + JSON.stringify(rule.getCriteriaValues().map(x => (x && x.getA1Notation) ? x.getSheet().getName() + '!' + x.getA1Notation() : (Array.isArray(x) ? x.length + '件' : x))) + (rule.getAllowInvalid() ? ' 警告のみ' : ' 拒否') + '］');
+        if (formula) cells.push(a1 + '=' + formula.slice(0, 300));
+        else if (v[r][c] !== '' && r1 + r <= head) cells.push(a1 + ':' + v[r][c].slice(0, 30));   // 値は見出し行だけ（取引の中身は出さない）
+      });
+      if (cells.length) out.push(cells.join(' ¦ '));
+    });
+  };
+  dump('96_Drop_Down', 1, 3, 3);
+  dump('01_Raw_Data', 1, 6, 4);
+  dump('固定コピペ用', 1, 4, 2);
+  dump('03_Card_Import', 1, 5, 3);
+  const text = out.join(String.fromCharCode(10)).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput('<textarea style="width:100%;height:420px" readonly onclick="this.select()">' + text + '</textarea><p>クリックして全選択し、コピーしてください。</p>').setWidth(760).setHeight(520),
+    '候補と入力規則のつながり（' + out.length + '行）');
 }
 
 // ---- 設定変更（費目管理） ----
