@@ -1041,90 +1041,153 @@ function kkbApiSetHiddenSheet_(ss, op) {
   return res === 'conflict' ? { status: 'conflict' } : { status: 'done', repeated: res === 'same' };
 }
 
-// 移行前後で変わってはいけない値（集計・取引・取込・固定コピペ・既存の一覧）を控える
-function kkbApiMasterSnapshot_(ss) {
-  const snap = kkbApiLiteSnapshot_(ss);
-  // 行数はシートの「最終行」ではなく決まった行数で読む（候補の列の数式を外すと最終行が縮むため）
-  const take = (name, rows, cols) => {
-    const s = ss.getSheetByName(name);
-    if (!s) return;
-    cols.forEach(c => { const a = kkbApiColNum_(c[0]), b = kkbApiColNum_(c[1]); snap[name + '!' + c[0]] = s.getRange(1, a, rows, b - a + 1).getValues(); });
-  };
-  KKB_MS.SHEETS.forEach(t => take(t.name, t.last, t.name === '01_Raw_Data' ? [['A', 'M'], ['AE', 'AE']] : t.name === '03_Card_Import' ? [['A', 'N']] : [['A', 'H']]));
-  take('96_Drop_Down', 200, [['A', 'O']]);
-  return snap;
-}
-
 function kkbApiMasterFlagCells_() {
   const cells = KKB_MS.KUBUN.map(k => ({ a1: k.hide + k.first + ':' + k.hide + k.last, head: k.hide + (k.first - 1) }));
   cells.push({ a1: KKB_MS.METHOD_HIDE + '3:' + KKB_MS.METHOD_HIDE + '62', head: KKB_MS.METHOD_HIDE + '2' });
   return cells;
 }
 
+// 移行は重いので、同じメニューを何回かに分けて押す（Apps Script は1回6分まで）。押すたびに続きから進む。
+//   ① 書く場所の確認と控え → 移行前の値の「指紋」（シートごとのハッシュ）を記録。時間が足りなければ途中まで記録して止まる
+//   ② 一覧の数式と隠す欄を追加（集計には影響しない）
+//   ③ 入力規則を一覧に向け、費目候補の列の数式を外す
+//   ④ 移行後の値の指紋を記録し、移行前と比べる。違えば自動で元に戻す
+// 途中でやめるときは、メニュー「費目管理の連動を元に戻す」で移行前に戻せる。
+const KKB_MS_PHASE = 'KKB_MASTER_V2_PHASE';   // '' → 'listed' → 'switched'
+const KKB_MS_FP = 'KKB_MASTER_V2_FP';         // 移行前の指紋 { done: {...}, complete }
+const KKB_MS_FP2 = 'KKB_MASTER_V2_FP2';       // 移行後の指紋
+const KKB_MS_BUDGET_MS = 270000;               // 1回で使う時間の目安（4分半）
+
+// 指紋を取る対象：月シート・年間推移・特別費管理と、3シート・96_Drop_Down の変わってはいけない範囲
+function kkbApiMasterTasks_(ss) {
+  const tasks = [];
+  kkbApiLiteSheets_(ss).map(s => s.getName()).concat(['年間推移', '特別費管理']).forEach(n => {
+    tasks.push({ key: n, read: () => { const s = ss.getSheetByName(n); return s && s.getLastRow() ? s.getRange(1, 1, s.getLastRow(), s.getLastColumn()).getValues() : []; } });
+  });
+  const take = (name, rows, c1, c2) => tasks.push({ key: name + '!' + c1, read: () => {
+    const s = ss.getSheetByName(name);
+    return s ? s.getRange(1, kkbApiColNum_(c1), rows, kkbApiColNum_(c2) - kkbApiColNum_(c1) + 1).getValues() : [];
+  } });
+  take('01_Raw_Data', 4986, 'A', 'M');
+  take('01_Raw_Data', 4986, 'AE', 'AE');
+  take('03_Card_Import', 4011, 'A', 'N');
+  take('固定コピペ用', 1027, 'A', 'H');
+  take('96_Drop_Down', 200, 'A', 'O');
+  return tasks;
+}
+
+const kkbApiMasterHashValues_ = values => kkbApiHash_(JSON.stringify(values.map(line => line.map(v =>
+  v instanceof Date ? 'D' + v.getTime() : typeof v === 'number' ? Math.round(v * 1e6) / 1e6 : v)))).slice(0, 24);
+
+// 指紋を続きから記録する。時間内に全部取れたら true
+function kkbApiMasterFingerprintStep_(ss, propKey, deadline) {
+  const props = PropertiesService.getScriptProperties();
+  const st = JSON.parse(props.getProperty(propKey) || '{"done":{}}');
+  for (const t of kkbApiMasterTasks_(ss)) {
+    if (st.done[t.key]) continue;
+    if (Date.now() > deadline) { props.setProperty(propKey, JSON.stringify(st)); return false; }
+    const t0 = Date.now();
+    st.done[t.key] = kkbApiMasterHashValues_(t.read());
+    console.log('指紋 ' + t.key + ' ' + ((Date.now() - t0) / 1000) + '秒');
+    props.setProperty(propKey, JSON.stringify(st));
+  }
+  st.complete = true;
+  props.setProperty(propKey, JSON.stringify(st));
+  return true;
+}
+
 function kkbApiMigrateMaster() {
   const ui = SpreadsheetApp.getUi();
   const ss = SpreadsheetApp.getActive();
   const props = PropertiesService.getScriptProperties();
-  if (kkbApiMasterOn_()) { ui.alert('移行済みです'); return; }
-  if (ui.alert('費目管理を正本にする（移行）',
+  const phase = props.getProperty(KKB_MS_PHASE) || '';
+  const started = !!props.getProperty(KKB_MS_FP);
+  if (props.getProperty(KKB_MS_RESTORE)) { ui.alert('元に戻す途中です。先にメニュー「費目管理の連動を元に戻す」を押して、戻しきってください'); return; }
+  if (kkbApiMasterOn_() && !phase) { ui.alert('移行済みです'); return; }
+  if (!started && ui.alert('費目管理を正本にする（移行）',
     '3シートの費目・入出金方法の候補を、費目管理から作る一覧に切り替えます。\n' +
     '・96_Drop_Down の Q:W 列に一覧の数式を追加\n・費目管理の H・R・S 列に「' + KKB_MS.HIDE_HEADER + '」のチェック欄を追加\n' +
     '・3シートの費目候補の列（01_Raw_Data N:AP、固定コピペ用 I:Z、03_Card_Import O:AQ）の数式を外す\n\n' +
-    '前後で集計の値を全セル比べ、1つでも違えば自動で元に戻します。数分かかります。よろしいですか？', ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
+    '重いので何回かに分けます。「移行しました」と出るまで、このメニューを続けて押してください（1回数分）。\n' +
+    '終わるまでアプリでの登録やシートの編集はしないでください。最後に移行前後の値を比べ、違えば自動で元に戻します。よろしいですか？', ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(30000)) { ui.alert('ほかの処理中です。少し待ってからもう一度実行してください'); return; }
+  const t0 = Date.now(), deadline = t0 + KKB_MS_BUDGET_MS, lap = name => console.log(name + ' ' + ((Date.now() - t0) / 1000) + '秒');
+  const again = (done, next) => ui.alert(done, '続けて、もう一度メニュー「費目管理を正本にする（移行）」を押してください。' + (next ? '\n次：' + next : ''), ui.ButtonSet.OK);
   try {
     const dd = requireSheetV3_(ss, KKB_MS.DD), fm = requireSheetV3_(ss, '費目管理');
-    // 書く場所が空いているかを先に確かめる（何か入っていれば何もしない）
-    const busy = [];
-    kkbApiListCells_().forEach(c => { if (dd.getRange(c.col + '1:' + c.col + (KKB_MS.LIST_ROWS + 1)).getValues().some(r => r[0] !== '')) busy.push('96_Drop_Down!' + c.col); });
     const flagCells = kkbApiMasterFlagCells_();
-    flagCells.forEach(f => {
-      if (fm.getRange(f.a1).getValues().some(r => r[0] !== '' && r[0] !== false)) busy.push('費目管理!' + f.a1);
-      if (fm.getRange(f.head).getValue() !== '') busy.push('費目管理!' + f.head);
-    });
-    if (busy.length) { ui.alert('使う予定の場所に値があるため中止しました', busy.join('\n'), ui.ButtonSet.OK); return; }
-
-    const backup = {};
-    KKB_MS.SHEETS.forEach(t => { const s = ss.getSheetByName(t.name); if (s) t.helpers.forEach(a1 => { backup[t.name + '!' + a1] = s.getRange(a1).getFormula(); }); });
-    const hiddenBefore = kkbApiHidden_();
-    props.setProperty(KKB_MS.BACKUP, JSON.stringify({ formulas: backup, hidden: hiddenBefore }));
-
-    const before = kkbApiMasterSnapshot_(ss);
-    // 1. 一覧の数式
-    kkbApiListCells_().forEach(c => { dd.getRange(c.col + '1').setValue(c.head); dd.getRange(c.col + '2').setFormula(c.formula); });
-    // 2. 隠す欄（今アプリで隠している費目・方法を引き継ぐ）
-    const box = SpreadsheetApp.newDataValidation().requireCheckbox().build();
-    flagCells.forEach(f => { fm.getRange(f.head).setValue(KKB_MS.HIDE_HEADER); fm.getRange(f.a1).setDataValidation(box).setValue(false); });
-    KKB_MS.KUBUN.forEach(k => {
-      for (let r = k.first; r <= k.last; r++) {
-        const name = String(fm.getRange(r, kkbApiColNum_(k.name)).getValue()).trim();
-        if (name && hiddenBefore.items.indexOf(k.kubun + '|' + name) >= 0) fm.getRange(r, kkbApiColNum_(k.hide)).setValue(true);
+    if (!phase) {
+      if (!started) {
+        // 書く場所が空いているかを先に確かめる（何か入っていれば何もしない）
+        const busy = [];
+        kkbApiListCells_().forEach(c => { if (dd.getRange(c.col + '1:' + c.col + (KKB_MS.LIST_ROWS + 1)).getValues().some(r => r[0] !== '')) busy.push('96_Drop_Down!' + c.col); });
+        flagCells.forEach(f => {
+          if (fm.getRange(f.a1).getValues().some(r => r[0] !== '' && r[0] !== false)) busy.push('費目管理!' + f.a1);
+          if (fm.getRange(f.head).getValue() !== '') busy.push('費目管理!' + f.head);
+        });
+        if (busy.length) { ui.alert('使う予定の場所に値があるため中止しました', busy.join('\n'), ui.ButtonSet.OK); return; }
+        const backup = {};
+        KKB_MS.SHEETS.forEach(t => { const s = ss.getSheetByName(t.name); if (s) t.helpers.forEach(a1 => { backup[t.name + '!' + a1] = s.getRange(a1).getFormula(); }); });
+        props.setProperty(KKB_MS.BACKUP, JSON.stringify({ formulas: backup, hidden: kkbApiHidden_() }));
+        props.setProperty(KKB_MS_FP, '{"done":{}}');
+        lap('確認と控え');
       }
-    });
-    fm.getRange(3, 17, 60, 1).getValues().forEach((r, i) => { if (hiddenBefore.methods.indexOf(String(r[0]).trim()) >= 0) fm.getRange(3 + i, kkbApiColNum_(KKB_MS.METHOD_HIDE)).setValue(true); });
-    SpreadsheetApp.flush();
-    // 3. 入力規則を一覧に向け、費目候補の列の数式を外す
-    props.setProperty(KKB_MS.FLAG, 'on');
-    kkbApiApplyRules_(ss);
-    KKB_MS.SHEETS.forEach(t => { const s = ss.getSheetByName(t.name); if (s) t.helpers.forEach(a1 => { if (backup[t.name + '!' + a1]) s.getRange(a1).clearContent(); }); });
-    SpreadsheetApp.flush();
-
-    // 4. 確かめる：集計などが1セルも変わっていないこと、一覧が空でないこと
-    const diff = kkbApiLiteDiff_(before, kkbApiMasterSnapshot_(ss));
-    const empty = kkbApiWaitLists_(ss);
-    if (diff.length || empty.length) {
-      kkbApiRestoreMaster_(ss);
-      ui.alert('値が変わったため元に戻しました', (diff.length ? '変わったセル：' + diff.join('、') : '') + (empty.length ? '\n候補が空の区分：' + empty.join('、') : ''), ui.ButtonSet.OK);
+      if (!kkbApiMasterFingerprintStep_(ss, KKB_MS_FP, deadline)) { again('移行前の値を途中まで記録しました', '記録の続き'); return; }
+      lap('移行前の指紋');
+      if (Date.now() > deadline - 60000) { again('移行前の値を記録しました', '一覧と隠す欄の追加'); return; }
+      const hiddenBefore = JSON.parse(props.getProperty(KKB_MS.BACKUP)).hidden || { items: [], methods: [] };
+      kkbApiListCells_().forEach(c => { dd.getRange(c.col + '1').setValue(c.head); dd.getRange(c.col + '2').setFormula(c.formula); });
+      const box = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+      flagCells.forEach(f => { fm.getRange(f.head).setValue(KKB_MS.HIDE_HEADER); fm.getRange(f.a1).setDataValidation(box).setValue(false); });
+      KKB_MS.KUBUN.forEach(k => {
+        for (let r = k.first; r <= k.last; r++) {
+          const name = String(fm.getRange(r, kkbApiColNum_(k.name)).getValue()).trim();
+          if (name && hiddenBefore.items.indexOf(k.kubun + '|' + name) >= 0) fm.getRange(r, kkbApiColNum_(k.hide)).setValue(true);
+        }
+      });
+      fm.getRange(3, 17, 60, 1).getValues().forEach((r, i) => { if (hiddenBefore.methods.indexOf(String(r[0]).trim()) >= 0) fm.getRange(3 + i, kkbApiColNum_(KKB_MS.METHOD_HIDE)).setValue(true); });
+      SpreadsheetApp.flush();
+      props.setProperty(KKB_MS_PHASE, 'listed');
+      lap('一覧と隠す欄');
+      again('一覧と隠す欄を追加しました', '入力規則の切り替え');
       return;
     }
+    if (phase === 'listed') {
+      // 一覧が計算できていることを確かめてから切り替える
+      props.setProperty(KKB_MS.FLAG, 'on');
+      const empty = kkbApiWaitLists_(ss);
+      if (empty.length) { kkbApiMigrateRollback_(ss, ui, '一覧が空のため元に戻しました', '候補が空の区分：' + empty.join('、'), t0 + 320000); return; }
+      lap('一覧の確認');
+      kkbApiApplyRules_(ss);
+      lap('入力規則');
+      const saved = JSON.parse(props.getProperty(KKB_MS.BACKUP) || '{}').formulas || {};
+      KKB_MS.SHEETS.forEach(t => { const s = ss.getSheetByName(t.name); if (s) t.helpers.forEach(a1 => { if (saved[t.name + '!' + a1]) s.getRange(a1).clearContent(); }); });
+      SpreadsheetApp.flush();
+      props.setProperty(KKB_MS_PHASE, 'switched');
+      lap('費目候補の列を外す');
+      again('入力規則を切り替えました', '移行前後の値の比較');
+      return;
+    }
+    // 移行後の指紋を取り、比べる
+    if (!kkbApiMasterFingerprintStep_(ss, KKB_MS_FP2, deadline)) { again('移行後の値を途中まで記録しました', '記録の続きと比較'); return; }
+    lap('移行後の指紋');
+    const before = JSON.parse(props.getProperty(KKB_MS_FP)).done, after = JSON.parse(props.getProperty(KKB_MS_FP2)).done;
+    const diff = Object.keys(before).filter(k => before[k] !== after[k]);
+    if (diff.length) { kkbApiMigrateRollback_(ss, ui, '値が変わったため元に戻しました', '変わった範囲：' + diff.join('、'), t0 + 320000); return; }
+    kkbApiMasterClearPhase_();
     ui.alert('移行しました', '費目管理の変更が、アプリ・01_Raw_Data・固定コピペ用・03_Card_Import の候補にそのまま反映されます。\n元に戻すときはメニュー「費目管理の連動を元に戻す」。', ui.ButtonSet.OK);
   } catch (err) {
-    try { kkbApiRestoreMaster_(ss); } catch (e2) { console.error(e2); }
-    ui.alert('途中で失敗したため元に戻しました：' + kkbApiErrText_(err));
+    console.error(err);
+    ui.alert('途中で止まりました：' + kkbApiErrText_(err) + '\n\nもう一度同じメニューを押すと続きから進めます。やめるときはメニュー「費目管理の連動を元に戻す」。');
   } finally {
     lock.releaseLock();
   }
+}
+
+function kkbApiMasterClearPhase_() {
+  const props = PropertiesService.getScriptProperties();
+  [KKB_MS_PHASE, KKB_MS_FP, KKB_MS_FP2].forEach(k => props.deleteProperty(k));
 }
 
 // 一覧の数式は重いシートでは計算に時間がかかる（読むと「読み込み中」で空に見える）。空でなくなるまで少し待つ
@@ -1145,47 +1208,75 @@ function kkbApiWaitLists_(ss) {
   });
 }
 
-// 移行前の数式・入力規則・隠す設定に戻す
-function kkbApiRestoreMaster_(ss) {
+// 移行前の数式・入力規則・隠す設定に戻す。重いので、時間が足りなければ途中まで戻して false を返す（もう一度呼ぶと続きから）。
+// 順番：アプリ側の切り替えを止める → 費目候補の列の数式を戻す → 各行の入力規則を戻す → 最後に追加した一覧と隠す欄を外す
+const KKB_MS_RESTORE = 'KKB_MASTER_V2_RESTORE';
+const KKB_MS_SPAN = { '01_Raw_Data': ['N', 'AP'], '固定コピペ用': ['I', 'Z'], '03_Card_Import': ['O', 'AQ'] };
+
+function kkbApiRestoreMaster_(ss, deadline) {
+  deadline = deadline || Date.now() + KKB_MS_BUDGET_MS;
   const props = PropertiesService.getScriptProperties();
   const saved = JSON.parse(props.getProperty(KKB_MS.BACKUP) || '{}');
   if (!saved.formulas) throw new Error('移行前の控えがありません');
-  // 隠す設定は、シートの今の状態をアプリの隠す設定として残す
-  if (kkbApiMasterOn_()) { try { props.setProperty('KKB_HIDDEN', JSON.stringify(kkbApiHiddenFromSheet_(ss))); } catch (e) { console.error(e); } }
-  else if (saved.hidden) props.setProperty('KKB_HIDDEN', JSON.stringify(saved.hidden));
-  props.deleteProperty(KKB_MS.FLAG);
-  Object.keys(saved.formulas).forEach(key => {
-    const i = key.indexOf('!'), s = ss.getSheetByName(key.slice(0, i));
-    if (s && saved.formulas[key]) s.getRange(key.slice(i + 1)).setFormula(saved.formulas[key]);
-  });
-  SpreadsheetApp.flush();
-  // 入力規則を、各行の候補の列（移行前と同じ形）に戻す
+  let st = JSON.parse(props.getProperty(KKB_MS_RESTORE) || 'null');
+  if (!st) {
+    // 隠す設定は、シートの今の状態をアプリの隠す設定として残す
+    if (kkbApiMasterOn_()) { try { props.setProperty('KKB_HIDDEN', JSON.stringify(kkbApiHiddenFromSheet_(ss))); } catch (e) { console.error(e); } }
+    else if (saved.hidden) props.setProperty('KKB_HIDDEN', JSON.stringify(saved.hidden));
+    props.deleteProperty(KKB_MS.FLAG);
+    Object.keys(saved.formulas).forEach(key => {
+      const i = key.indexOf('!'), s = ss.getSheetByName(key.slice(0, i));
+      if (s && saved.formulas[key]) s.getRange(key.slice(i + 1)).setFormula(saved.formulas[key]);
+    });
+    SpreadsheetApp.flush();
+    st = { sheet: 0, row: 0 };
+    props.setProperty(KKB_MS_RESTORE, JSON.stringify(st));
+  }
+  // 入力規則を、各行の候補の列（移行前と同じ形：その行の N:AP など）に戻す。400行ずつ、進み具合を記録しながら
   const methodOld = SpreadsheetApp.newDataValidation().requireValueInRange(ss.getSheetByName('費目管理').getRange('Q3:Q30'), true).setAllowInvalid(false).build();
-  const span = { '01_Raw_Data': ['N', 'AP'], '固定コピペ用': ['I', 'Z'], '03_Card_Import': ['O', 'AQ'] };
-  KKB_MS.SHEETS.forEach(t => {
-    const s = ss.getSheetByName(t.name);
-    if (!s) return;
-    const n = t.last - t.first + 1, sp = span[t.name];
-    s.getRange(t.first, t.himoku, n, 1).setDataValidations(Array.from({ length: n }, (_, i) =>
-      [SpreadsheetApp.newDataValidation().requireValueInRange(s.getRange(sp[0] + (t.first + i) + ':' + sp[1] + (t.first + i)), true).setAllowInvalid(false).build()]));
-    s.getRange(t.first, t.method, n, 1).setDataValidation(methodOld);
-  });
+  for (; st.sheet < KKB_MS.SHEETS.length; st.sheet++, st.row = 0) {
+    const t = KKB_MS.SHEETS[st.sheet], s = ss.getSheetByName(t.name);
+    if (!s) continue;
+    const sp = KKB_MS_SPAN[t.name], c1 = kkbApiColNum_(sp[0]), width = kkbApiColNum_(sp[1]) - c1 + 1;
+    if (!st.row) { s.getRange(t.first, t.method, t.last - t.first + 1, 1).setDataValidation(methodOld); st.row = t.first; }
+    while (st.row <= t.last) {
+      if (Date.now() > deadline) { props.setProperty(KKB_MS_RESTORE, JSON.stringify(st)); return false; }
+      const n = Math.min(400, t.last - st.row + 1), rules = [];
+      for (let r = st.row; r < st.row + n; r++) rules.push([SpreadsheetApp.newDataValidation().requireValueInRange(s.getRange(r, c1, 1, width), true).setAllowInvalid(false).build()]);
+      s.getRange(st.row, t.himoku, n, 1).setDataValidations(rules);
+      st.row += n;
+      props.setProperty(KKB_MS_RESTORE, JSON.stringify(st));
+    }
+  }
   // 追加した一覧と隠す欄を外す
   const dd = ss.getSheetByName(KKB_MS.DD), fm = ss.getSheetByName('費目管理');
   kkbApiListCells_().forEach(c => dd.getRange(c.col + '1:' + c.col + '2').clearContent());
   kkbApiMasterFlagCells_().forEach(f => { fm.getRange(f.a1).clearDataValidations().clearContent(); fm.getRange(f.head).clearContent(); });
   SpreadsheetApp.flush();
+  props.deleteProperty(KKB_MS_RESTORE);
+  kkbApiMasterClearPhase_();
+  return true;
 }
 
 function kkbApiRestoreMasterMenu() {
   const ui = SpreadsheetApp.getUi();
-  if (ui.alert('費目管理の連動を元に戻しますか？', '移行前の費目候補の列と入力規則に戻します。今の「' + KKB_MS.HIDE_HEADER + '」の設定はアプリの隠す設定として残します。',
+  const resuming = !!PropertiesService.getScriptProperties().getProperty(KKB_MS_RESTORE);
+  if (!resuming && ui.alert('費目管理の連動を元に戻しますか？', '移行前の費目候補の列と入力規則に戻します。今の「' + KKB_MS.HIDE_HEADER + '」の設定はアプリの隠す設定として残します。',
     ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(30000)) { ui.alert('ほかの処理中です'); return; }
-  try { kkbApiRestoreMaster_(SpreadsheetApp.getActive()); ui.alert('元に戻しました'); }
-  catch (err) { ui.alert('戻せませんでした：' + kkbApiErrText_(err)); }
+  try {
+    if (kkbApiRestoreMaster_(SpreadsheetApp.getActive())) ui.alert('元に戻しました');
+    else ui.alert('途中まで戻しました', '続けて、もう一度メニュー「費目管理の連動を元に戻す」を押してください。', ui.ButtonSet.OK);
+  }
+  catch (err) { ui.alert('戻せませんでした：' + kkbApiErrText_(err) + '\n\nもう一度同じメニューを押すと続きから戻します。'); }
   finally { lock.releaseLock(); }
+}
+
+// 移行の途中で値の違いなどが見つかったときに戻す（時間が足りなければ、メニューで続きを戻してもらう）
+function kkbApiMigrateRollback_(ss, ui, title, detail, deadline) {
+  const done = kkbApiRestoreMaster_(ss, deadline);
+  ui.alert(title, detail + (done ? '' : '\n\n戻しきれなかったので、続けてメニュー「費目管理の連動を元に戻す」を押してください。'), ui.ButtonSet.OK);
 }
 
 // ---- 過去の月の予算を固定 ----
